@@ -38,7 +38,7 @@ def make_row(row: TRowResult, include_timestamp: bool) -> Row:
         cell_map = {c.columnName: c.cell for c in row.sortedColumns}
     elif row.columns is not None:
         cell_map = row.columns
-    else:
+    else:  # pragma: no cover
         raise RuntimeError("Neither columns nor sortedColumns is available!")
     return {
         name: (cell.value, cell.timestamp) if include_timestamp else cell.value

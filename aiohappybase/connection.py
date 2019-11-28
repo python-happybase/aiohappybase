@@ -203,7 +203,7 @@ class Connection:
 
         closer = self.transport.close()
         if inspect.isawaitable(closer):  # Allow async close methods
-            await closer
+            await closer  # pragma: no cover (No current transports use this)
         # Socket isn't really closed yet, wait for it
         await aio.sleep(0)
 
