@@ -5,7 +5,7 @@ AIOHappyBase
    :target: https://aiohappybase.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
 
-.. image:: https://github.com/aiudirog/aiohappybase/workflows/tests/badge.svg
+.. image:: https://github.com/aiudirog/aiohappybase/workflows/Run%20Tests/badge.svg
    :target: https://github.com/aiudirog/aiohappybase
    :alt: Workflow Status
 
