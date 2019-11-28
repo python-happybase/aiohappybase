@@ -1,4 +1,4 @@
-name: test
+name: Run Tests
 
 on:
   pull_request:
@@ -12,7 +12,8 @@ jobs:
         python: ['3.6', '3.7']
     steps:
       - uses: actions/checkout@v1
-      - uses: ./.github/actions/test
+      - name: Run Tests
+        uses: ./.github/actions/test
         env:
           PYTHON_VERSION: ${{ matrix.python }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

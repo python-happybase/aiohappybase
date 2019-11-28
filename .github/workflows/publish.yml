@@ -2,8 +2,6 @@ name: Upload Python Package
 
 on:
   push:
-    branches:
-      - master
     tags:
       - 'v*'
 
@@ -12,7 +10,7 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@master
       - name: Create Release
         id: create_release
@@ -27,6 +25,7 @@ jobs:
           draft: true  # Give me a moment to fill in the description
           prerelease: false
   deploy:
+    name: Deploy Release to PyPI
     needs: release
     runs-on: ubuntu-latest
     steps:
