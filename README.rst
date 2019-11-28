@@ -16,7 +16,7 @@ AIOHappyBase
 HBase_. It is a fork of the original `HappyBase <https://github.com/wbolster/happybase>`_ library aiming to deliver a very similar API.
 
 * `Documentation <https://aiohappybase.readthedocs.io/>`_ (Docs)
-* `Downloads <http://pypi.python.org/pypi/aiohappybase/>`_ (PyPI) (TODO)
+* `Downloads <http://pypi.python.org/pypi/aiohappybase/>`_ (PyPI)
 * `Source code <https://github.com/aiudirog/aiohappybase>`_ (Github)
 
 .. _Python: http://python.org/
