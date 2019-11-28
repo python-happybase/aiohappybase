@@ -50,7 +50,7 @@ def thrift_type_to_dict(obj: Any) -> Dict[bytes, Any]:
 def ensure_bytes(value: AnyStr) -> bytes:
     """Convert text into bytes, and leaves bytes as-is."""
     if isinstance(value, bytes):
-        return value 
+        return value
     if isinstance(value, str):
         return value.encode('utf-8')
     raise TypeError(

@@ -13,9 +13,9 @@ __all__ = [
     'NoConnectionsAvailable',
 ]
 
-from . import _load_hbase_thrift  # noqa
+from ._version import __version__  # noqa
 
-from ._version import __version__
+from . import _load_hbase_thrift  # noqa
 
 from .connection import DEFAULT_HOST, DEFAULT_PORT, Connection
 from .table import Table
