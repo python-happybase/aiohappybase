@@ -508,9 +508,19 @@ class TestAPI(asynctest.TestCase):
 
     async def test_scan_filter_and_batch_size(self):
         # See issue #54 and #56
-        filt = b"SingleColumnValueFilter ('cf1', 'qual1', =, 'binary:val1')"
-        async for k, v in self.table.scan(filter=filt):
-            pass
+        filt = b"SingleColumnValueFilter('cf1','col1',=,'binary:%s',true,true)"
+
+        async for _ in self.table.scan(filter=filt % b'hello there'):
+            self.fail("There is no cf1:col1='hello there'")
+
+        got_results = False
+        async for k, v in self.table.scan(filter=filt % b'v1'):
+            got_results = True
+            self.assertIsNotNone(next((x for x in v if b'cf1' in x), None))
+            self.assertEqual(v[b'cf1:col1'], b'v1')
+
+        if not got_results:
+            self.fail("No results found for cf1:col1='v1'")
 
     async def test_delete(self):
         row_key = b'row-test-delete'

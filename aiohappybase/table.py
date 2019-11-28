@@ -64,7 +64,7 @@ class Table:
     def __repr__(self):
         return f'<{__name__}.{self.__class__.__name__} name={self.name!r}>'
 
-    async def families(self) -> Dict[bytes, Dict[bytes, Any]]:
+    async def families(self) -> Dict[bytes, Dict[str, Any]]:
         """
         Retrieve the column families for this table.
 
@@ -82,7 +82,7 @@ class Table:
         descriptors = await self.client.getColumnDescriptors(self.name)
         return map_dict(descriptors, keys=lambda k: k.rstrip(b':'))
 
-    async def regions(self) -> List[Dict[bytes, Any]]:
+    async def regions(self) -> List[Dict[str, Any]]:
         """
         Retrieve the regions for this table.
 
