@@ -12,7 +12,7 @@ while ! netstat -tna | grep 'LISTEN\>' | grep -q ':9090\>'; do sleep 1; done
 sleep 1  # Give it a little extra time
 ${PYTHON} -m unittest  # TEST
 
-if [ "${PYTHON_VERSION}" == "3.7" ]; then
+if [ "${PYTHON_VERSION}" == "3.7" ] && [ "${CODECOV_TOKEN}" != "" ]; then
   ${PYTHON} -m pip install coverage codecov
   ${PYTHON} -m coverage run -m unittest
   ${PYTHON} -m coverage xml
