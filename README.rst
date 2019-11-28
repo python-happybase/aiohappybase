@@ -1,13 +1,13 @@
 AIOHappyBase
 ============
 
-.. image:: https://readthedocs.org/projects/aiohappybase/badge/?version=latest
-   :target: https://aiohappybase.readthedocs.io/en/latest/?badge=latest
-   :alt: Documentation Status
-
 .. image:: https://github.com/aiudirog/aiohappybase/workflows/Run%20Tests/badge.svg
    :target: https://github.com/aiudirog/aiohappybase
    :alt: Workflow Status
+
+.. image:: https://readthedocs.org/projects/aiohappybase/badge/?version=latest
+   :target: https://aiohappybase.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
 
 .. image:: https://codecov.io/gh/aiudirog/aiohappybase/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/aiudirog/aiohappybase
