@@ -4,13 +4,13 @@ User guide
 
 .. py:currentmodule:: aiohappybase
 
-This user guide explores the AIOAIOHappyBase API and should provide you with 
+This user guide explores the AIOHappyBase API and should provide you with 
 enough information to get you started. Note that this user guide is intended as 
-an introduction to AIOAIOHappyBase, not to HBase in general. Readers should 
+an introduction to AIOHappyBase, not to HBase in general. Readers should 
 already have a basic understanding of HBase and its data model.
 
 While the user guide does cover most features, it is not a complete reference
-guide. More information about the AIOAIOHappyBase API is available from the 
+guide. More information about the AIOHappyBase API is available from the 
 :doc:`API documentation <api>`.
 
 .. contents:: On this page
