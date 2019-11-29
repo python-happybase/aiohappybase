@@ -51,7 +51,7 @@ The example below illustrates basic usage of the library. The :doc:`user guide
             row = await table.row(b'row-key')
             print(row[b'family:qual1'])  # prints 'value1'
 
-            async for key, data in table.rows([b'row-key-1', b'row-key-2']):
+            for key, data in await table.rows([b'row-key-1', b'row-key-2']):
                print(key, data)  # prints row key and data for each row
 
             async for key, data in table.scan(row_prefix=b'row'):
