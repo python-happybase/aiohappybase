@@ -6,3 +6,6 @@ build/
 coverage/
 dist/
 doc/build/
+venv
+.idea
+
