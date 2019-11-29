@@ -16,9 +16,15 @@ from typing import (
     AsyncGenerator as AsyncGen,
 )
 
-from Hbase_thrift import TScan, TRowResult
+from Hbase_thrift import TScan
 
-from ._util import thrift_type_to_dict, bytes_increment, map_dict
+from ._util import (
+    thrift_type_to_dict,
+    bytes_increment,
+    map_dict,
+    make_row,
+    make_row_ts,
+)
 from .batch import Batch
 
 if TYPE_CHECKING:
@@ -30,20 +36,6 @@ Data = Dict[bytes, bytes]
 Row = Union[Dict[bytes, bytes], Dict[bytes, Tuple[bytes, int]]]
 
 pack_i64 = Struct('>q').pack
-
-
-def make_row(row: TRowResult, include_timestamp: bool) -> Row:
-    """Make a row dict for a given row result."""
-    if row.sortedColumns is not None:
-        cell_map = {c.columnName: c.cell for c in row.sortedColumns}
-    elif row.columns is not None:
-        cell_map = row.columns
-    else:  # pragma: no cover
-        raise RuntimeError("Neither columns nor sortedColumns is available!")
-    return {
-        name: (cell.value, cell.timestamp) if include_timestamp else cell.value
-        for name, cell in cell_map.items()
-    }
 
 
 class Table:
@@ -140,7 +132,8 @@ class Table:
         if not rows:
             return {}
 
-        return make_row(rows[0], include_timestamp)
+        _make_row = (make_row_ts if include_timestamp else make_row)
+        return _make_row(rows[0])
 
     async def rows(self,
                    rows: List[bytes],
@@ -187,7 +180,8 @@ class Table:
             results = await self.client.getRowsWithColumnsTs(
                 self.name, rows, columns, timestamp, {})
 
-        return [(r.row, make_row(r, include_timestamp)) for r in results]
+        _make_row = (make_row_ts if include_timestamp else make_row)
+        return [(r.row, _make_row(r)) for r in results]
 
     async def cells(self,
                     row: bytes,
@@ -368,6 +362,8 @@ class Table:
         if row_start is None:
             row_start = b''
 
+        _make_row = (make_row_ts if include_timestamp else make_row)
+
         if self.connection.compat == '0.90':
             # The scannerOpenWithScan() Thrift function is not
             # available, so work around it as much as possible with the
@@ -440,7 +436,7 @@ class Table:
                 n_fetched += len(items)
 
                 for n_returned, item in enumerate(items, n_returned + 1):
-                    yield item.row, make_row(item, include_timestamp)
+                    yield item.row, _make_row(item)
 
                     if limit is not None and n_returned == limit:
                         return  # scan has finished

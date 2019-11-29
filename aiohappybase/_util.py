@@ -1,11 +1,21 @@
 """
-AIOHappyBase utility module.
+HappyBase utility module.
 
 These functions are not part of the public API.
 """
-
 import re
-from typing import Dict, List, Any, AnyStr, Optional, TypeVar, Callable
+from typing import (
+    Dict,
+    List,
+    Tuple,
+    Any,
+    AnyStr,
+    Optional,
+    TypeVar,
+    Callable,
+)
+
+from Hbase_thrift import TRowResult, TCell
 
 T = TypeVar('T')
 
@@ -94,3 +104,36 @@ def map_dict(data: Dict[KTI, VTI],
     :return: New dictionary with keys and values mapped
     """
     return {keys(k): values(v) for k, v in data.items()}
+
+
+def make_row(row: TRowResult) -> Dict[bytes, bytes]:
+    """
+    Make a row dict for a given row result.
+
+    :param row: Row result from thrift client to convert a row dictionary
+    :return: Dictionary mapping columns to values for the row.
+    """
+    return {name: cell.value for name, cell in _get_cell_map(row).items()}
+
+
+def make_row_ts(row: TRowResult) -> Dict[bytes, Tuple[bytes, int]]:
+    """
+    Make a row dict for a given row result including timestamps.
+
+    :param row: Row result from thrift client to convert a row dictionary
+    :return: Dictionary mapping columns to tuples of (value, timestamp)
+    """
+    return {
+        name: (cell.value, cell.timestamp)
+        for name, cell in _get_cell_map(row).items()
+    }
+
+
+def _get_cell_map(row: TRowResult) -> Dict[bytes, TCell]:
+    """Convert a row result to dictionary mapping column names to cells."""
+    if row.sortedColumns is not None:
+        return {c.columnName: c.cell for c in row.sortedColumns}
+    elif row.columns is not None:
+        return row.columns
+    else:  # pragma: no cover
+        raise RuntimeError("Neither columns nor sortedColumns is available!")
