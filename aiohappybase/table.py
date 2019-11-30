@@ -45,6 +45,8 @@ class Table:
     This class cannot be instantiated directly;
     use :py:meth:`Connection.table` instead.
     """
+    BATCH_TYPE = Batch
+
     def __init__(self, name: bytes, connection: 'Connection'):
         self.name = name
         self.connection = connection
@@ -545,7 +547,7 @@ class Table:
         """
         kwargs = locals().copy()
         del kwargs['self']
-        return Batch(table=self, **kwargs)
+        return self.BATCH_TYPE(table=self, **kwargs)
 
     # Atomic counters
 
