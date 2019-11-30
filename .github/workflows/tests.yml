@@ -5,6 +5,9 @@ on:
   push:
     paths:
       - '**.py'
+  schedule:
+    # Test master every Saturday at midnight to verify dependencies
+    - cron:  '0 0 * * 6'
 
 jobs:
   flake8:
