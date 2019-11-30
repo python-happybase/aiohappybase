@@ -14,16 +14,6 @@ from ._util import synchronize
 
 logger = logging.getLogger(__name__)
 
-STRING_OR_BINARY = (str, bytes)
-
-COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
-
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 9090
-DEFAULT_TRANSPORT = 'buffered'
-DEFAULT_COMPAT = '0.98'
-DEFAULT_PROTOCOL = 'binary'
-
 
 @synchronize
 class Connection:

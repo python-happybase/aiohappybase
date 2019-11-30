@@ -46,7 +46,7 @@ class ConnectionPool:
 
     .. versionadded:: 0.5
 
-    Connection pools in work by creating multiple connections and providing
+    Connection pools work by creating multiple connections and providing
     one whenever a thread asks. When a thread is done with it, it returns
     it to the pool to be made available to other threads.
 
