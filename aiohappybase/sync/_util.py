@@ -16,8 +16,14 @@ import aiohappybase
 
 T = TypeVar('T')
 
-_remove_async = partial(re.compile(r'(?<!\w)(async|await)\s?').sub, '')
-_convert_async_meta_methods = partial(re.compile(r'__a(\w+)__').sub, r'__\1__')
+
+def _make_sub(pat: str, repl: str = '', flags: int = 0) -> Callable[[str], str]:
+    """Create a regex substitution function for the given arguments."""
+    return partial(re.compile(pat, flags=flags).sub, repl)  # noqa
+
+
+_remove_async = _make_sub(r'(?<!\w)(async|await)\s?')
+_convert_async_meta_methods = _make_sub(r'__a(\w+)__', repl=r'__\1__')
 
 
 def synchronize(cls: type) -> type:
@@ -78,5 +84,5 @@ def _synchronize_func(func: Callable[..., Awaitable[T]],
 
 def _is_async_func(value: Any) -> bool:
     """Determine if a given value is a function defined with async."""
-    value = unwrap(value)  # Remove decorators, like asynccontextmanager
+    value = unwrap(value)  # Remove wrappers, like asynccontextmanager
     return iscoroutinefunction(value) or isasyncgenfunction(value)

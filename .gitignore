@@ -1,4 +1,4 @@
-*.py[co]
+*.py[coi]
 *.egg-info/
 .coverage
 .tox/
@@ -8,4 +8,3 @@ dist/
 doc/build/
 venv
 .idea
-
