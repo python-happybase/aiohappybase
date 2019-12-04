@@ -4,7 +4,6 @@ HappyBase tests.
 
 import os
 import unittest
-from functools import partial
 from threading import Thread, current_thread
 
 from aiohappybase.sync import *  # noqa - For synchronize()
@@ -29,7 +28,7 @@ connection_kwargs = dict(
 )
 
 
-@partial(synchronize, base=AsyncTestAPI)
+@synchronize(base=AsyncTestAPI)
 class TestSyncAPI(unittest.TestCase):
 
     @classmethod

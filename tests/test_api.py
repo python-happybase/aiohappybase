@@ -12,12 +12,7 @@ import asynctest
 
 from thriftpy2.thrift import TException
 
-from aiohappybase import (
-    Connection,
-    Table,
-    ConnectionPool,
-    NoConnectionsAvailable,
-)
+from aiohappybase import Connection, ConnectionPool, NoConnectionsAvailable
 from aiohappybase.pool import current_task  # Easiest way to get the right one
 
 AIOHAPPYBASE_HOST = os.environ.get('AIOHAPPYBASE_HOST', 'localhost')

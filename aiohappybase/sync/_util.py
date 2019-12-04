@@ -30,7 +30,7 @@ _convert_async_names = _make_sub(
 )
 
 
-def synchronize(cls: type, base: type = None) -> type:
+def synchronize(cls: type = None, base: type = None) -> type:
     """
     Class decorator for classes in the sync package to copy any undefined
     functionality from their async equivalents. All async functions will
@@ -39,8 +39,11 @@ def synchronize(cls: type, base: type = None) -> type:
     original async one to allow debugging, however the await part of any
     statements will have no effect (as it doesn't exist anymore).
     """
-    # Get the equivalent async class
+    # Support base=X in decorator form
+    if cls is None:
+        return partial(synchronize, base=base)
     if base is None:
+        # Get the equivalent async class if none given
         base = getattr(aiohappybase, cls.__name__)
     # Define the global scope for creating functions to ensure any
     # look-ups find the right values.

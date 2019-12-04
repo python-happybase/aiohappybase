@@ -4,7 +4,6 @@ HappyBase utility tests.
 
 import unittest as ut
 from inspect import iscoroutinefunction
-from functools import partial
 from codecs import decode, encode
 
 from aiohappybase import _util as util  # noqa
@@ -100,7 +99,7 @@ class TestUtil(ut.TestCase):
             async def context(self):
                 yield self
 
-        @partial(sync_util.synchronize, base=A)
+        @sync_util.synchronize(base=A)
         class B:
             pass
 
