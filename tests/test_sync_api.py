@@ -2,7 +2,6 @@
 HappyBase tests.
 """
 
-import os
 import unittest
 from threading import Thread, current_thread
 
@@ -10,22 +9,6 @@ from aiohappybase.sync import *  # noqa - For synchronize()
 from aiohappybase.sync._util import synchronize  # noqa
 
 from tests.test_api import TestAPI as AsyncTestAPI
-
-HAPPYBASE_HOST = os.environ.get('HAPPYBASE_HOST', 'localhost')
-HAPPYBASE_PORT = int(os.environ.get('HAPPYBASE_PORT', '9090'))
-HAPPYBASE_COMPAT = os.environ.get('HAPPYBASE_COMPAT', '0.98')
-HAPPYBASE_TRANSPORT = os.environ.get('HAPPYBASE_TRANSPORT', 'buffered')
-
-TABLE_PREFIX = b'happybase_tests_tmp'
-TEST_TABLE_NAME = b'test1'
-
-connection_kwargs = dict(
-    host=HAPPYBASE_HOST,
-    port=HAPPYBASE_PORT,
-    table_prefix=TABLE_PREFIX,
-    compat=HAPPYBASE_COMPAT,
-    transport=HAPPYBASE_TRANSPORT,
-)
 
 
 @synchronize(base=AsyncTestAPI)
