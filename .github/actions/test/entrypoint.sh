@@ -10,11 +10,20 @@ ${PYTHON} -m pip install -U -r test-requirements.txt
 # Wait for thrift port to bind
 while ! netstat -tna | grep 'LISTEN\>' | grep -q ':9090\>'; do sleep 1; done
 sleep 1  # Give it a little extra time
-${PYTHON} -m unittest  # TEST
+
 
 if [ "${CODECOV_TOKEN}" != "" ]; then
   ${PYTHON} -m pip install coverage codecov
-  ${PYTHON} -m coverage run -m unittest
-  ${PYTHON} -m coverage xml
-  ${PYTHON} -m codecov --token=${CODECOV_TOKEN}
+
+  run_tests() {
+    ${PYTHON} -m coverage run -m unittest
+    ${PYTHON} -m coverage xml
+    ${PYTHON} -m codecov --token=${CODECOV_TOKEN}
+  }
+else
+  run_tests() { ${PYTHON} -m unittest; }
 fi
+
+run_tests  # Run tests for latest HBase compat
+export AIOHAPPYBASE_COMPAT=0.90
+run_tests  # Run tests for min HBase compat
