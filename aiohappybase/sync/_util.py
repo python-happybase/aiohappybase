@@ -9,7 +9,6 @@ from inspect import (
     getsourcelines,
     iscoroutinefunction,
     isasyncgenfunction,
-    unwrap,
 )
 
 import aiohappybase
@@ -23,10 +22,15 @@ def _make_sub(pat: str, repl: str = '', flags: int = 0) -> Callable[[str], str]:
 
 
 _remove_async = _make_sub(r'(?<!\w)(async|await)\s?')
-_convert_async_meta_methods = _make_sub(r'__a(\w+)__', repl=r'__\1__')
+_convert_async_names = _make_sub(
+    # Match __aenter__, __aexit__, __anext__, aclose, StopAsyncIteration
+    r'(?:(__)a(enter|exit|next)(__))|a(close)|(Stop)Async(Iteration)',
+    # Replace with __enter__, __exit__, __next__, close, StopIteration
+    repl=r'\1\2\3\4\5\6',
+)
 
 
-def synchronize(cls: type) -> type:
+def synchronize(cls: type, base: type = None) -> type:
     """
     Class decorator for classes in the sync package to copy any undefined
     functionality from their async equivalents. All async functions will
@@ -36,7 +40,8 @@ def synchronize(cls: type) -> type:
     statements will have no effect (as it doesn't exist anymore).
     """
     # Get the equivalent async class
-    base = getattr(aiohappybase, cls.__name__)
+    if base is None:
+        base = getattr(aiohappybase, cls.__name__)
     # Define the global scope for creating functions to ensure any
     # look-ups find the right values.
     scope = {
@@ -52,7 +57,9 @@ def synchronize(cls: type) -> type:
             continue
         if _is_async_func(value):
             value = _synchronize_func(value, scope)
-            name = value.__name__  # Could change: __aenter__ -> __enter__
+            # Name could change like __aenter__ -> __enter__
+            # Get the new one while bypassing decorators
+            name = _unwrap(value).__name__
         setattr(cls, name, value)
     return cls
 
@@ -67,11 +74,12 @@ def _synchronize_func(func: Callable[..., Awaitable[T]],
     :param scope: Scope to exec the new function in
     :return: Converted sync function
     """
+    func = _unwrap(func)
     # Get the text for the function
     lines, line_number = getsourcelines(func)
     code = dedent(''.join([*(), *lines]))
-    # Convert async meta methods to sync equivalent (__aenter__ -> __enter__)
-    code = _convert_async_meta_methods(code)
+    # Convert standard async names to sync equivalent
+    code = _convert_async_names(code)
     # Remove async/await everywhere
     code = _remove_async(code)
     # Compile code at the same line number as the async code to allow debugging
@@ -84,5 +92,15 @@ def _synchronize_func(func: Callable[..., Awaitable[T]],
 
 def _is_async_func(value: Any) -> bool:
     """Determine if a given value is a function defined with async."""
-    value = unwrap(value)  # Remove wrappers, like asynccontextmanager
+    value = _unwrap(value)  # Remove wrappers, like asynccontextmanager
     return iscoroutinefunction(value) or isasyncgenfunction(value)
+
+
+def _unwrap(value: Any) -> Any:
+    """Like inspect.unwrap but also handles static/class methods."""
+    for attr in ('__wrapped__', '__func__'):
+        try:
+            return _unwrap(getattr(value, attr))
+        except AttributeError:
+            pass
+    return value

@@ -57,37 +57,39 @@ def with_new_loop(func):
 
 @asynctest.strict
 class TestAPI(asynctest.TestCase):
-    connection: Connection
-    table: Table
 
     @classmethod
     @with_new_loop
     def setUpClass(cls, loop):
-        run = loop.run_until_complete
+        loop.run_until_complete(cls.create_table())
 
-        with Connection(**connection_kwargs) as conn:
+    @classmethod
+    @with_new_loop
+    def tearDownClass(cls, loop):
+        loop.run_until_complete(cls.destroy_table())
+
+    @staticmethod
+    async def create_table():
+        async with Connection(**connection_kwargs) as conn:
             assert conn is not None
 
-            tables = run(conn.tables())
+            tables = await conn.tables()
             if TEST_TABLE_NAME in tables:
                 print("Test table already exists; removing it...")
-                run(conn.delete_table(TEST_TABLE_NAME, disable=True))
+                await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
             cfs = {
                 'cf1': {},
                 'cf2': None,
                 'cf3': {'max_versions': 1},
             }
-            table = run(conn.create_table(TEST_TABLE_NAME, families=cfs))
+            table = await conn.create_table(TEST_TABLE_NAME, families=cfs)
             assert table is not None
 
-    @classmethod
-    @with_new_loop
-    def tearDownClass(cls, loop):
-        run = loop.run_until_complete
-
-        with Connection(**connection_kwargs) as conn:
-            run(conn.delete_table(TEST_TABLE_NAME, disable=True))
+    @staticmethod
+    async def destroy_table():
+        async with Connection(**connection_kwargs) as conn:
+            await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
     async def setUp(self):
         self.connection = Connection(**connection_kwargs)
@@ -559,9 +561,7 @@ class TestAPI(asynctest.TestCase):
     async def test_connection_pool(self):
 
         async def run():
-            task_id = hex(id(current_task()))
-
-            print(f"Task {task_id} starting")
+            print(f"{self._current_task_name()} starting")
 
             async def inner_function():
                 # Nested connection requests must return the same connection
@@ -588,11 +588,10 @@ class TestAPI(asynctest.TestCase):
 
                     await connection.tables()
 
-            print(f"Task {task_id} done")
+            print(f"{self._current_task_name()} done")
 
-        loop = aio.get_event_loop()
         async with ConnectionPool(size=3, **connection_kwargs) as pool:
-            await aio.gather(*(loop.create_task(run()) for _ in range(10)))
+            await self._run_tasks(run, count=10)
 
     async def test_pool_exhaustion(self):
 
@@ -605,7 +604,16 @@ class TestAPI(asynctest.TestCase):
             async with pool.connection():
                 # At this point the only connection is assigned to this task,
                 # so another task cannot obtain a connection.
-                await aio.get_event_loop().create_task(run())
+                await self._run_tasks(run)
+
+    @staticmethod
+    def _run_tasks(func, count: int = 1):
+        return aio.gather(*(func() for _ in range(count)))
+
+    @staticmethod
+    def _current_task_name() -> str:
+        task_id = hex(id(current_task()))
+        return f"Task {task_id}"
 
 
 if __name__ == '__main__':
