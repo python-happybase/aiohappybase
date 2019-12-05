@@ -8,11 +8,13 @@ from threading import Thread, current_thread
 from aiohappybase.sync import *  # noqa - For synchronize()
 from aiohappybase.sync._util import synchronize  # noqa
 
-from tests.test_api import TestAPI as AsyncTestAPI
+from tests.test_api import TestAPI as AsyncTestAPI, connection_kwargs
 
 
 @synchronize(base=AsyncTestAPI)
 class TestSyncAPI(unittest.TestCase):
+    CONNECTION_TYPE = Connection
+    POOL_TYPE = ConnectionPool
 
     @classmethod
     def setUpClass(cls):
@@ -21,6 +23,11 @@ class TestSyncAPI(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.destroy_table()
+
+    def test_autoconnect(self):
+        conn = self.CONNECTION_TYPE(**connection_kwargs, autoconnect=True)
+        self.assertTrue(conn.transport.is_open())
+        conn.close()
 
     @staticmethod
     def _run_tasks(func, count: int = 1):

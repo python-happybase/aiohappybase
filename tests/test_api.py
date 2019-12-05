@@ -35,23 +35,21 @@ connection_kwargs = dict(
 def with_new_loop(func):
     @wraps(func)
     def _wrapper(*args, **kwargs):
-        try:
-            old_loop = aio.get_event_loop()
-        except RuntimeError:  # No event loop
-            old_loop = None
+        old_loop = aio.get_event_loop()
         loop = aio.new_event_loop()
         aio.set_event_loop(loop)
         try:
             return func(*args, loop=loop, **kwargs)
         finally:
-            if old_loop is not None:
-                aio.set_event_loop(old_loop)
+            aio.set_event_loop(old_loop)
             loop.close()
     return _wrapper
 
 
 @asynctest.strict
 class TestAPI(asynctest.TestCase):
+    CONNECTION_TYPE = Connection
+    POOL_TYPE = ConnectionPool
 
     @classmethod
     @with_new_loop
@@ -63,13 +61,13 @@ class TestAPI(asynctest.TestCase):
     def tearDownClass(cls, loop):
         loop.run_until_complete(cls.destroy_table())
 
-    @staticmethod
-    async def create_table():
-        async with Connection(**connection_kwargs) as conn:
+    @classmethod
+    async def create_table(cls):
+        async with cls.CONNECTION_TYPE(**connection_kwargs) as conn:
             assert conn is not None
 
             tables = await conn.tables()
-            if TEST_TABLE_NAME in tables:
+            if TEST_TABLE_NAME in tables:  # pragma: nocover
                 print("Test table already exists; removing it...")
                 await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
@@ -81,13 +79,13 @@ class TestAPI(asynctest.TestCase):
             table = await conn.create_table(TEST_TABLE_NAME, families=cfs)
             assert table is not None
 
-    @staticmethod
-    async def destroy_table():
-        async with Connection(**connection_kwargs) as conn:
+    @classmethod
+    async def destroy_table(cls):
+        async with cls.CONNECTION_TYPE(**connection_kwargs) as conn:
             await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
     async def setUp(self):
-        self.connection = Connection(**connection_kwargs)
+        self.connection = self.CONNECTION_TYPE(**connection_kwargs)
         await self.connection.open()
         self.table = self.connection.table(TEST_TABLE_NAME)
 
@@ -107,12 +105,17 @@ class TestAPI(asynctest.TestCase):
             i += 1
         return i
 
+    def test_autoconnect(self):
+        conn = self.CONNECTION_TYPE(**connection_kwargs, autoconnect=True)
+        self.assertTrue(conn.transport.is_open())
+        aio.get_event_loop().run_until_complete(conn.close())
+
     def test_connection_compat(self):
         with self.assertRaises(ValueError):
-            Connection(compat='0.1.invalid.version')
+            self.CONNECTION_TYPE(compat='0.1.invalid.version')
 
     def test_timeout_arg(self):
-        Connection(timeout=5000)
+        self.CONNECTION_TYPE(timeout=5000)
 
     async def test_enabling(self):
         conn = self.connection
@@ -134,14 +137,14 @@ class TestAPI(asynctest.TestCase):
         self.assertEqual(conn.table('foobar').name, TABLE_PREFIX + b'_foobar')
         self.assertEqual(conn.table('foobar', use_prefix=False).name, b'foobar')
 
-        c = Connection()
+        c = self.CONNECTION_TYPE()
         self.assertEqual(b'foo', c._table_name('foo'))
 
         with self.assertRaises(TypeError):
-            Connection(table_prefix=123)  # noqa
+            self.CONNECTION_TYPE(table_prefix=123)  # noqa
 
         with self.assertRaises(TypeError):
-            Connection(table_prefix_separator=2.1)  # noqa
+            self.CONNECTION_TYPE(table_prefix_separator=2.1)  # noqa
 
     async def test_stringify(self):
         str(self.connection)
@@ -551,10 +554,10 @@ class TestAPI(asynctest.TestCase):
 
     async def test_connection_pool_construction(self):
         with self.assertRaises(TypeError):
-            ConnectionPool(size='abc')  # noqa
+            self.POOL_TYPE(size='abc')  # noqa
 
         with self.assertRaises(ValueError):
-            ConnectionPool(size=0)
+            self.POOL_TYPE(size=0)
 
     async def test_connection_pool(self):
 
@@ -588,17 +591,17 @@ class TestAPI(asynctest.TestCase):
 
             print(f"{self._current_task_name()} done")
 
-        async with ConnectionPool(size=3, **connection_kwargs) as pool:
+        async with self.POOL_TYPE(size=3, **connection_kwargs) as pool:
             await self._run_tasks(run, count=10)
 
     async def test_pool_exhaustion(self):
 
         async def run():
             with self.assertRaises(NoConnectionsAvailable):
-                async with pool.connection(timeout=.1) as connection:
-                    await connection.tables()
+                async with pool.connection(timeout=.1) as _connection:
+                    self.fail("Connection available???")  # pragma: nocover
 
-        async with ConnectionPool(size=1, **connection_kwargs) as pool:
+        async with self.POOL_TYPE(size=1, **connection_kwargs) as pool:
             async with pool.connection():
                 # At this point the only connection is assigned to this task,
                 # so another task cannot obtain a connection.
