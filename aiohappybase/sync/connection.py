@@ -9,7 +9,6 @@ from thriftpy2.transport import TBufferedTransport, TFramedTransport
 from thriftpy2.transport.socket import TSocket
 from thriftpy2.thrift import TClient
 
-from .table import Table
 from ._util import synchronize
 
 logger = logging.getLogger(__name__)
@@ -28,8 +27,6 @@ class Connection:
     )
     THRIFT_SOCKET = TSocket
     THRIFT_CLIENT = TClient
-
-    TABLE_TYPE = Table
 
     def _autoconnect(self):
         self.open()

@@ -2,8 +2,9 @@ import re
 from functools import partial
 from importlib import import_module
 from textwrap import dedent
-from typing import Callable, TypeVar, Awaitable, Dict, Any, Tuple
+from typing import Callable, TypeVar, Awaitable, Dict, Any, Tuple, Union
 from contextlib import contextmanager
+from types import FunctionType, CodeType
 from inspect import (
     getsourcefile,
     getsourcelines,
@@ -51,6 +52,7 @@ def synchronize(cls: type = None, base: type = None) -> type:
         'contextmanager': contextmanager,  # Convert asynccontextmanager
         **import_module(base.__module__).__dict__,  # Scope of base class module
         **base.__dict__,  # Scope of base class
+        **import_module('aiohappybase.sync').__dict__,  # Scope of sync pkg
         **import_module(cls.__module__).__dict__,  # Scope of class module
         **cls.__dict__,  # Scope inside the class
     }
@@ -58,8 +60,9 @@ def synchronize(cls: type = None, base: type = None) -> type:
     for name, value in base.__dict__.items():
         if name in cls.__dict__:
             continue
-        if _is_async_func(value):
-            value = _synchronize_func(value, scope)
+        unwrapped = _unwrap(value)
+        if isinstance(unwrapped, FunctionType):
+            value = _synchronize_func(unwrapped, scope)
             # Name could change like __aenter__ -> __enter__
             # Get the new one while bypassing decorators
             name = _unwrap(value).__name__
@@ -67,41 +70,58 @@ def synchronize(cls: type = None, base: type = None) -> type:
     return cls
 
 
-def _synchronize_func(func: Callable[..., Awaitable[T]],
-                      scope: Dict[str, Any]) -> Tuple[str, Callable[..., T]]:
+def _synchronize_func(func: Callable[..., Union[T, Awaitable[T]]],
+                      scope: Dict[str, Any]) -> Callable[..., T]:
     """
-    Convert a given function from async to sync while retaining the file and
-    line number meta data so that debugging is still possible.
+    Re-compile the given function without async/await keywords to ensure
+    that it is synchronous while retaining the file and line number meta
+    data so that debugging is still possible.
 
-    :param func: Async function to convert
+    :param func: Function to ensure is synchronous
     :param scope: Scope to exec the new function in
     :return: Converted sync function
     """
-    func = _unwrap(func)
-    # Get the text for the function
-    lines, line_number = getsourcelines(func)
-    code = dedent(''.join([*(), *lines]))
-    # Convert standard async names to sync equivalent
-    code = _convert_async_names(code)
-    # Remove async/await everywhere
-    code = _remove_async(code)
+    lnum, code = _get_source(func)
+    if _is_async_func(func):
+        # Convert standard async names to sync equivalent
+        code = _convert_async_names(code)
+        # Remove async/await everywhere
+        code = _remove_async(code)
     # Compile code at the same line number as the async code to allow debugging
-    code = compile('\n' * (line_number - 1) + code, getsourcefile(func), 'exec')
+    code = compile('\n' * (lnum - 1) + code, getsourcefile(func), 'exec')
     # Execute the code which will add the function to the local dict
+    return _exec_code(code, scope)
+
+
+def _exec_code(code: CodeType, scope: Dict[str, Any]) -> Callable[..., T]:
+    """
+    Execute a given code object in a new scope and return the result.
+
+    :param code: Code object to execute
+    :param scope: Scope to exec the new function in
+    :return: New function
+    """
     local = {}
     exec(code, scope, local)
     return next(iter(local.values()))  # Retrieve the function and return it
 
 
+def _get_source(func: FunctionType) -> Tuple[int, str]:
+    """Get the line number and source code for a given function."""
+    # Get the text for the function
+    lines, line_number = getsourcelines(func)
+    code = dedent(''.join([*(), *lines]))
+    return line_number, code
+
+
 def _is_async_func(value: Any) -> bool:
     """Determine if a given value is a function defined with async."""
-    value = _unwrap(value)  # Remove wrappers, like asynccontextmanager
     return iscoroutinefunction(value) or isasyncgenfunction(value)
 
 
 def _unwrap(value: Any) -> Any:
     """Like inspect.unwrap but also handles static/class methods."""
-    for attr in ('__wrapped__', '__func__'):
+    for attr in ('__wrapped__', '__func__', 'fget'):
         try:
             return _unwrap(getattr(value, attr))
         except AttributeError:

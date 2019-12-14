@@ -109,8 +109,6 @@ class Connection:
     THRIFT_SOCKET = TAsyncSocket
     THRIFT_CLIENT = TAsyncClient
 
-    TABLE_TYPE = Table
-
     def __init__(self,
                  host: str = DEFAULT_HOST,
                  port: int = DEFAULT_PORT,
@@ -218,7 +216,7 @@ class Connection:
         # Socket isn't really closed yet, wait for it
         await aio.sleep(0)
 
-    def table(self, name: AnyStr, use_prefix: bool = True) -> 'TABLE_TYPE':
+    def table(self, name: AnyStr, use_prefix: bool = True) -> Table:
         """
         Return a table object.
 
@@ -241,7 +239,7 @@ class Connection:
         name = ensure_bytes(name)
         if use_prefix:
             name = self._table_name(name)
-        return self.TABLE_TYPE(name, self)
+        return Table(name, self)
 
     # Table administration and maintenance
 
@@ -266,7 +264,7 @@ class Connection:
 
     async def create_table(self,
                            name: AnyStr,
-                           families: Dict[str, Dict[str, Any]]) -> 'TABLE_TYPE':
+                           families: Dict[str, Dict[str, Any]]) -> Table:
         """
         Create a table.
 

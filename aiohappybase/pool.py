@@ -105,7 +105,6 @@ class ConnectionPool:
     the `autoconnect` argument, since maintaining connections is the
     task of the pool.
     """
-    CONNECTION_TYPE = Connection
     QUEUE_TYPE = aio.LifoQueue
     LOCAL_TYPE = TaskLocal
 
@@ -128,7 +127,7 @@ class ConnectionPool:
         kwargs['autoconnect'] = False
 
         for i in range(size):
-            self._queue.put_nowait(self.CONNECTION_TYPE(**kwargs))
+            self._queue.put_nowait(Connection(**kwargs))
 
     async def close(self):
         """Clean up all pool connections and delete the queue."""

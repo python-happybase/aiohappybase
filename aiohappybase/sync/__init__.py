@@ -12,9 +12,9 @@ __all__ = [
     'NoConnectionsAvailable',
 ]
 
-from .connection import Connection
-from .table import Table
 from .batch import Batch
+from .table import Table
+from .connection import Connection
 from .pool import ConnectionPool
 
 from .. import DEFAULT_HOST, DEFAULT_PORT, NoConnectionsAvailable

@@ -59,7 +59,6 @@ class ConnectionPool:
     the `autoconnect` argument, since maintaining connections is the
     task of the pool.
     """
-    CONNECTION_TYPE = Connection
     QUEUE_TYPE = queue.LifoQueue
     LOCAL_TYPE = ThreadLocal
 
