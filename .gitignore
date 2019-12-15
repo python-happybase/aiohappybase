@@ -6,5 +6,5 @@ build/
 coverage/
 dist/
 doc/build/
-venv
+venv*/
 .idea
