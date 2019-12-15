@@ -6,6 +6,7 @@ import logging
 import socket
 import asyncio as aio
 import queue
+import threading
 from numbers import Real
 from typing import Any, Dict, Awaitable
 
@@ -34,24 +35,50 @@ logger = logging.getLogger(__name__)
 
 
 class TaskLocal:
-    """Asyncio Task version of threading.local()."""
+    """
+    Wrapper around threading.local() to make it task local as well.
+
+    .. warning::
+        We do not use ContextVars because they are not local to the task,
+        but rather local to the task stack. This means functions like
+        asyncio.gather() and asyncio.shield(), which create new tasks,
+        inherit the context and can cause multiple tasks to access the
+        same connection.
+    """
     def __init__(self):
-        self._task_data_by_id: Dict[int, Dict[str, Any]] = {}
+        # __setattr__ is overridden, avoid infinite recursion
+        object.__setattr__(self, '_thread_local', threading.local())
+
+    @property
+    def _task_data_by_id(self) -> Dict[int, Dict[str, Any]]:
+        """Thread local dictionary mapping task id's to their local data."""
+        try:
+            return self._thread_local.task_data_by_id
+        except AttributeError:
+            self._thread_local.task_data_by_id = {}
+            return self._thread_local.task_data_by_id
 
     @property
     def _task_id(self) -> int:
-        task = current_task()
+        """Get the current task ID and ensure the task has a data store."""
+        try:
+            task = current_task()
+        except RuntimeError:
+            task = None  # Outside event loop
         task_id = id(task)
         if task_id not in self._task_data_by_id:
             self._task_data_by_id[task_id] = {}
-            task.add_done_callback(self._del_task_callback)
+            if task is not None:
+                task.add_done_callback(self._del_task_callback)
         return task_id
 
     @property
     def _task_data(self) -> Dict[str, Any]:
+        """Get the data store for the current task."""
         return self._task_data_by_id[self._task_id]
 
     def _del_task_callback(self, task: aio.Task):
+        """Clean up data store after the task has finished."""
         del self._task_data_by_id[id(task)]
 
     def __getattr__(self, item: str) -> Any:
@@ -61,8 +88,6 @@ class TaskLocal:
             raise AttributeError(item)
 
     def __setattr__(self, key: str, value: Any) -> None:
-        if key == '_task_data_by_id':
-            return super().__setattr__(key, value)
         self._task_data[key] = value
 
     def __delattr__(self, item: str) -> None:
@@ -106,7 +131,6 @@ class ConnectionPool:
     task of the pool.
     """
     QUEUE_TYPE = aio.LifoQueue
-    LOCAL_TYPE = TaskLocal
 
     def __init__(self, size: int, **kwargs):
         """
@@ -122,7 +146,7 @@ class ConnectionPool:
         logger.debug(f"Initializing connection pool with {size} connections")
 
         self._queue = self.QUEUE_TYPE(maxsize=size)
-        self._connections = self.LOCAL_TYPE()
+        self._connections = TaskLocal()
 
         kwargs['autoconnect'] = False
 
