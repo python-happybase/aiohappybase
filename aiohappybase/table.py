@@ -45,6 +45,7 @@ class Table:
     This class cannot be instantiated directly;
     use :py:meth:`Connection.table` instead.
     """
+
     def __init__(self, name: bytes, connection: 'Connection'):
         self.name = name
         self.connection = connection

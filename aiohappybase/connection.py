@@ -23,14 +23,6 @@ STRING_OR_BINARY = (str, bytes)
 
 COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
 
-# TODO: Auto generate these?
-THRIFT_TRANSPORTS = dict(
-    buffered=TAsyncBufferedTransport,
-)
-THRIFT_PROTOCOLS = dict(
-    binary=TAsyncBinaryProtocol,
-)
-
 DEFAULT_HOST = 'localhost'
 DEFAULT_PORT = 9090
 DEFAULT_TRANSPORT = 'buffered'
@@ -48,9 +40,8 @@ class Connection:
     specifed, the `timeout` argument specifies the socket timeout in
     milliseconds.
 
-    If `autoconnect` is `True` (the default) the connection is made
-    directly, otherwise :py:meth:`Connection.open` must be called
-    explicitly before first use.
+    If `autoconnect` is `True` the connection is made directly, otherwise
+    :py:meth:`Connection.open` must be called explicitly before first use.
 
     The optional `table_prefix` and `table_prefix_separator` arguments
     specify a prefix and a separator string to be prepended to all table
@@ -108,6 +99,16 @@ class Connection:
     :param transport: Thrift transport mode (optional)
     :param protocol: Thrift protocol mode (optional)
     """
+    # TODO: Auto generate these?
+    THRIFT_TRANSPORTS = dict(
+        buffered=TAsyncBufferedTransport,
+    )
+    THRIFT_PROTOCOLS = dict(
+        binary=TAsyncBinaryProtocol,
+    )
+    THRIFT_SOCKET = TAsyncSocket
+    THRIFT_CLIENT = TAsyncClient
+
     def __init__(self,
                  host: str = DEFAULT_HOST,
                  port: int = DEFAULT_PORT,
@@ -119,8 +120,10 @@ class Connection:
                  transport: str = DEFAULT_TRANSPORT,
                  protocol: str = DEFAULT_PROTOCOL):
 
-        if transport not in THRIFT_TRANSPORTS:
-            raise ValueError(f"'transport' not in {list(THRIFT_TRANSPORTS)}")
+        if transport not in self.THRIFT_TRANSPORTS:
+            raise ValueError(
+                f"'transport' not in {list(self.THRIFT_TRANSPORTS)}"
+            )
 
         if table_prefix is not None:
             if not isinstance(table_prefix, STRING_OR_BINARY):
@@ -134,8 +137,8 @@ class Connection:
         if compat not in COMPAT_MODES:
             raise ValueError(f"'compat' not in {list(COMPAT_MODES)}")
 
-        if protocol not in THRIFT_PROTOCOLS:
-            raise ValueError(f"'protocol' not in {list(THRIFT_PROTOCOLS)}")
+        if protocol not in self.THRIFT_PROTOCOLS:
+            raise ValueError(f"'protocol' not in {list(self.THRIFT_PROTOCOLS)}")
 
         # Allow host and port to be None, which may be easier for
         # applications wrapping a Connection instance.
@@ -146,29 +149,35 @@ class Connection:
         self.table_prefix_separator = table_prefix_separator
         self.compat = compat
 
-        self._transport_class = THRIFT_TRANSPORTS[transport]
-        self._protocol_class = THRIFT_PROTOCOLS[protocol]
+        self._transport_class = self.THRIFT_TRANSPORTS[transport]
+        self._protocol_class = self.THRIFT_PROTOCOLS[protocol]
 
         self._refresh_thrift_client()
 
         if autoconnect:
-            loop = aio.get_event_loop()
-            if loop.is_running():
-                raise RuntimeError(
-                    "'autoconnect' cannot be used inside a running event loop!"
-                )
-            else:
-                loop.run_until_complete(self.open())
+            self._autoconnect()
 
         self._initialized = True
+
+    def _autoconnect(self):
+        loop = aio.get_event_loop()
+        if loop.is_running():
+            raise RuntimeError(
+                "'autoconnect' cannot be used inside a running event loop!"
+            )
+        else:
+            loop.run_until_complete(self.open())
 
     def _refresh_thrift_client(self) -> None:
         """Refresh the Thrift socket, transport, and client."""
         # TODO: Support all kwargs to make_client
-        socket = TAsyncSocket(self.host, self.port, socket_timeout=self.timeout)
+        socket = self.THRIFT_SOCKET(
+            self.host, self.port,
+            socket_timeout=self.timeout,
+        )
         self.transport = self._transport_class(socket)
         protocol = self._protocol_class(self.transport, decode_response=False)
-        self.client = TAsyncClient(Hbase, protocol)
+        self.client = self.THRIFT_CLIENT(Hbase, protocol)
 
     def _table_name(self, name: AnyStr) -> bytes:
         """Construct a table name by optionally adding a table name prefix."""
@@ -330,8 +339,7 @@ class Connection:
         if disable and await self.is_table_enabled(name):
             await self.disable_table(name)
 
-        name = self._table_name(name)
-        await self.client.deleteTable(name)
+        await self.client.deleteTable(self._table_name(name))
 
     async def enable_table(self, name: AnyStr) -> None:
         """

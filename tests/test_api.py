@@ -12,12 +12,7 @@ import asynctest
 
 from thriftpy2.thrift import TException
 
-from aiohappybase import (
-    Connection,
-    Table,
-    ConnectionPool,
-    NoConnectionsAvailable,
-)
+from aiohappybase import Connection, ConnectionPool, NoConnectionsAvailable
 from aiohappybase.pool import current_task  # Easiest way to get the right one
 
 AIOHAPPYBASE_HOST = os.environ.get('AIOHAPPYBASE_HOST', 'localhost')
@@ -40,54 +35,52 @@ connection_kwargs = dict(
 def with_new_loop(func):
     @wraps(func)
     def _wrapper(*args, **kwargs):
-        try:
-            old_loop = aio.get_event_loop()
-        except RuntimeError:  # No event loop
-            old_loop = None
+        old_loop = aio.get_event_loop()
         loop = aio.new_event_loop()
         aio.set_event_loop(loop)
         try:
             return func(*args, loop=loop, **kwargs)
         finally:
-            if old_loop is not None:
-                aio.set_event_loop(old_loop)
+            aio.set_event_loop(old_loop)
             loop.close()
     return _wrapper
 
 
 @asynctest.strict
 class TestAPI(asynctest.TestCase):
-    connection: Connection
-    table: Table
 
     @classmethod
     @with_new_loop
     def setUpClass(cls, loop):
-        run = loop.run_until_complete
+        loop.run_until_complete(cls.create_table())
 
-        with Connection(**connection_kwargs) as conn:
+    @classmethod
+    @with_new_loop
+    def tearDownClass(cls, loop):
+        loop.run_until_complete(cls.destroy_table())
+
+    @classmethod
+    async def create_table(cls):
+        async with Connection(**connection_kwargs) as conn:
             assert conn is not None
 
-            tables = run(conn.tables())
-            if TEST_TABLE_NAME in tables:
+            tables = await conn.tables()
+            if TEST_TABLE_NAME in tables:  # pragma: nocover
                 print("Test table already exists; removing it...")
-                run(conn.delete_table(TEST_TABLE_NAME, disable=True))
+                await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
             cfs = {
                 'cf1': {},
                 'cf2': None,
                 'cf3': {'max_versions': 1},
             }
-            table = run(conn.create_table(TEST_TABLE_NAME, families=cfs))
+            table = await conn.create_table(TEST_TABLE_NAME, families=cfs)
             assert table is not None
 
     @classmethod
-    @with_new_loop
-    def tearDownClass(cls, loop):
-        run = loop.run_until_complete
-
-        with Connection(**connection_kwargs) as conn:
-            run(conn.delete_table(TEST_TABLE_NAME, disable=True))
+    async def destroy_table(cls):
+        async with Connection(**connection_kwargs) as conn:
+            await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
     async def setUp(self):
         self.connection = Connection(**connection_kwargs)
@@ -109,6 +102,11 @@ class TestAPI(asynctest.TestCase):
         async for _ in scanner:
             i += 1
         return i
+
+    def test_autoconnect(self):
+        conn = Connection(**connection_kwargs, autoconnect=True)
+        self.assertTrue(conn.transport.is_open())
+        aio.get_event_loop().run_until_complete(conn.close())
 
     def test_connection_compat(self):
         with self.assertRaises(ValueError):
@@ -510,8 +508,12 @@ class TestAPI(asynctest.TestCase):
         # See issue #54 and #56
         filt = b"SingleColumnValueFilter('cf1','col1',=,'binary:%s',true,true)"
 
-        async for _ in self.table.scan(filter=filt % b'hello there'):
-            self.fail("There is no cf1:col1='hello there'")
+        if self.connection.compat == '0.90':
+            with self.assertRaises(NotImplementedError):
+                await self._scan_len(filter=filt % b'hello there')
+            return
+
+        self.assertEqual(0, await self._scan_len(filter=filt % b'hello there'))
 
         got_results = False
         async for k, v in self.table.scan(filter=filt % b'v1'):
@@ -519,8 +521,7 @@ class TestAPI(asynctest.TestCase):
             self.assertIsNotNone(next((x for x in v if b'cf1' in x), None))
             self.assertEqual(v[b'cf1:col1'], b'v1')
 
-        if not got_results:
-            self.fail("No results found for cf1:col1='v1'")
+        self.assertTrue(got_results, msg="No results found for cf1:col1='v1'")
 
     async def test_delete(self):
         row_key = b'row-test-delete'
@@ -559,9 +560,7 @@ class TestAPI(asynctest.TestCase):
     async def test_connection_pool(self):
 
         async def run():
-            task_id = hex(id(current_task()))
-
-            print(f"Task {task_id} starting")
+            print(f"{self._current_task_name()} starting")
 
             async def inner_function():
                 # Nested connection requests must return the same connection
@@ -588,24 +587,32 @@ class TestAPI(asynctest.TestCase):
 
                     await connection.tables()
 
-            print(f"Task {task_id} done")
+            print(f"{self._current_task_name()} done")
 
-        loop = aio.get_event_loop()
         async with ConnectionPool(size=3, **connection_kwargs) as pool:
-            await aio.gather(*(loop.create_task(run()) for _ in range(10)))
+            await self._run_tasks(run, count=10)
 
     async def test_pool_exhaustion(self):
 
         async def run():
             with self.assertRaises(NoConnectionsAvailable):
-                async with pool.connection(timeout=.1) as connection:
-                    await connection.tables()
+                async with pool.connection(timeout=.1) as _connection:
+                    self.fail("Connection available???")  # pragma: nocover
 
         async with ConnectionPool(size=1, **connection_kwargs) as pool:
             async with pool.connection():
                 # At this point the only connection is assigned to this task,
                 # so another task cannot obtain a connection.
-                await aio.get_event_loop().create_task(run())
+                await self._run_tasks(run)
+
+    @staticmethod
+    def _run_tasks(func, count: int = 1):
+        return aio.gather(*(func() for _ in range(count)))
+
+    @staticmethod
+    def _current_task_name() -> str:
+        task_id = hex(id(current_task()))
+        return f"Task {task_id}"
 
 
 if __name__ == '__main__':

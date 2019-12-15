@@ -2,10 +2,13 @@
 HappyBase utility tests.
 """
 
-from codecs import decode, encode
 import unittest as ut
+from inspect import iscoroutinefunction
+from codecs import decode, encode
 
 from aiohappybase import _util as util  # noqa
+from aiohappybase.sync import _util as sync_util  # noqa
+from aiohappybase.pool import asynccontextmanager
 
 
 class TestUtil(ut.TestCase):
@@ -48,3 +51,81 @@ class TestUtil(ut.TestCase):
             v_hex = encode(v, 'hex')
             self.assertEqual(expected, v_hex)
             self.assertLess(s, v)
+
+    def test_remove_async(self):
+        r = sync_util._remove_async
+        eq = self.assertEqual
+        eq(
+            r("""
+            async def x():
+                await some_func()
+                yield y(await other_coro)
+            """),
+            """
+            def x():
+                some_func()
+                yield y(other_coro)
+            """
+        )
+
+    def test_convert_async_std_methods(self):
+        c = sync_util._convert_async_names
+        eq = self.assertEqual
+
+        eq(c('__aenter__'), '__enter__')
+        eq(c('__aexit__'), '__exit__')
+        eq(c('__anext__'), '__next__')
+        eq(c('aclose'), 'close')
+        eq(c('StopAsyncIteration'), 'StopIteration')
+
+        eq(c('aenter'), 'aenter')
+        eq(c('231!452ca\t123cap__aenter__\n'), '231!452ca\t123cap__enter__\n')
+
+    def test_synchronize(self):
+        class A:
+            async def x(self):
+                return 10
+
+            async def y(self):
+                return await self.x()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_):
+                pass
+
+            @asynccontextmanager
+            async def context(self):
+                yield self
+
+        @sync_util.synchronize(base=A)
+        class B:
+            pass
+
+        self.assertTrue(iscoroutinefunction(A.x))
+        self.assertTrue(iscoroutinefunction(A.y))
+        self.assertTrue(iscoroutinefunction(A.__aenter__))
+
+        self.assertTrue(hasattr(B, 'x'))
+        self.assertFalse(iscoroutinefunction(B.x))
+
+        self.assertTrue(hasattr(B, 'y'))
+        self.assertFalse(iscoroutinefunction(B.y))
+
+        self.assertFalse(hasattr(B, '__aenter__'))
+        self.assertTrue(hasattr(B, '__enter__'))
+        self.assertFalse(iscoroutinefunction(B.__enter__))
+
+        self.assertFalse(hasattr(B, '__aexit__'))
+        self.assertTrue(hasattr(B, '__exit__'))
+        self.assertFalse(iscoroutinefunction(B.__exit__))
+
+        self.assertEqual(B().x(), 10)
+        self.assertEqual(B().y(), 10)
+
+        with B() as b:
+            self.assertIsInstance(b, B)
+
+        with B().context() as b:
+            self.assertIsInstance(b, B)

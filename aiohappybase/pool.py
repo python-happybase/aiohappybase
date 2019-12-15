@@ -5,7 +5,10 @@ AIOHappyBase connection pool module.
 import logging
 import socket
 import asyncio as aio
+import queue
+import threading
 from numbers import Real
+from typing import Any, Dict, Awaitable
 
 from thriftpy2.thrift import TException
 
@@ -31,6 +34,69 @@ logger = logging.getLogger(__name__)
 #
 
 
+class TaskLocal:
+    """
+    Wrapper around threading.local() to make it task local as well.
+
+    .. warning::
+        We do not use ContextVars because they are not local to the task,
+        but rather local to the task stack. This means functions like
+        asyncio.gather() and asyncio.shield(), which create new tasks,
+        inherit the context and can cause multiple tasks to access the
+        same connection.
+    """
+    def __init__(self):
+        # __setattr__ is overridden, avoid infinite recursion
+        object.__setattr__(self, '_thread_local', threading.local())
+
+    @property
+    def _task_data_by_id(self) -> Dict[int, Dict[str, Any]]:
+        """Thread local dictionary mapping task id's to their local data."""
+        try:
+            return self._thread_local.task_data_by_id
+        except AttributeError:
+            self._thread_local.task_data_by_id = {}
+            return self._thread_local.task_data_by_id
+
+    @property
+    def _task_id(self) -> int:
+        """Get the current task ID and ensure the task has a data store."""
+        try:
+            task = current_task()
+        except RuntimeError:
+            task = None  # Outside event loop
+        task_id = id(task)
+        if task_id not in self._task_data_by_id:
+            self._task_data_by_id[task_id] = {}
+            if task is not None:
+                task.add_done_callback(self._del_task_callback)
+        return task_id
+
+    @property
+    def _task_data(self) -> Dict[str, Any]:
+        """Get the data store for the current task."""
+        return self._task_data_by_id[self._task_id]
+
+    def _del_task_callback(self, task: aio.Task):
+        """Clean up data store after the task has finished."""
+        del self._task_data_by_id[id(task)]
+
+    def __getattr__(self, item: str) -> Any:
+        try:
+            return self._task_data[item]
+        except KeyError:
+            raise AttributeError(item)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        self._task_data[key] = value
+
+    def __delattr__(self, item: str) -> None:
+        try:
+            del self._task_data[item]
+        except KeyError:
+            raise AttributeError(item)
+
+
 class NoConnectionsAvailable(RuntimeError):
     """
     Exception raised when no connections are available.
@@ -51,7 +117,7 @@ class ConnectionPool:
 
     Connection pools in sync code (like :py:class:`happybase.ConnectionPool`)
     work by creating multiple connections and providing one whenever a thread
-    asks. When a thread is done with it, it returns it too the pool to be
+    asks. When a thread is done with it, it returns it to the pool to be
     made available to other threads. In async code, instead of threads,
     tasks make the request to the pool for a connection.
 
@@ -63,11 +129,14 @@ class ConnectionPool:
     :py:class:`happybase.Connection` constructor, with the exception of
     the `autoconnect` argument, since maintaining connections is the
     task of the pool.
-
-    :param int size: the maximum number of concurrently open connections
-    :param kwargs: keyword arguments for :py:class:`happybase.Connection`
     """
+    QUEUE_TYPE = aio.LifoQueue
+
     def __init__(self, size: int, **kwargs):
+        """
+        :param int size: the maximum number of concurrently open connections
+        :param kwargs: keyword arguments for Connection
+        """
         if not isinstance(size, int):
             raise TypeError("Pool 'size' arg must be an integer")
 
@@ -76,8 +145,8 @@ class ConnectionPool:
 
         logger.debug(f"Initializing connection pool with {size} connections")
 
-        self._queue = aio.LifoQueue(maxsize=size)
-        self._task_connections = {}
+        self._queue = self.QUEUE_TYPE(maxsize=size)
+        self._connections = TaskLocal()
 
         kwargs['autoconnect'] = False
 
@@ -89,15 +158,22 @@ class ConnectionPool:
         while True:
             try:
                 await self._queue.get_nowait().close()
-            except aio.QueueEmpty:
+            except (aio.QueueEmpty, queue.Empty):
                 break
         del self._queue
+
+    def _queue_get(self, timeout: Real = None) -> Awaitable[Connection]:
+        """
+        Just get the connection from the queue with a timeout.
+        :py:meth:`_acquire_connection` will handle any errors.
+        """
+        return aio.wait_for(self._queue.get(), timeout)
 
     async def _acquire_connection(self, timeout: Real = None) -> Connection:
         """Acquire a connection from the pool."""
         try:
-            return await aio.wait_for(self._queue.get(), timeout)
-        except aio.TimeoutError:
+            return await self._queue_get(timeout)
+        except (aio.TimeoutError, queue.Empty, TimeoutError):
             raise NoConnectionsAvailable("Timeout waiting for a connection")
 
     async def _return_connection(self, connection: Connection) -> None:
@@ -122,10 +198,8 @@ class ConnectionPool:
 
         :param timeout: number of seconds to wait (optional)
         :return: active connection from the pool
-        :rtype: :py:class:`happybase.Connection`
         """
-        task_id = id(current_task())
-        connection = self._task_connections.get(task_id)
+        connection = getattr(self._connections, 'current', None)
 
         return_after_use = False
         if connection is None:
@@ -134,7 +208,7 @@ class ConnectionPool:
             # by the task id so that nested calls get the same connection
             return_after_use = True
             connection = await self._acquire_connection(timeout)
-            self._task_connections[task_id] = connection
+            self._connections.current = connection
 
         try:
             # Open connection, because connections are opened lazily.
@@ -157,10 +231,9 @@ class ConnectionPool:
 
         finally:
             # Remove thread local reference after the outermost 'with'
-            # block ends. Afterwards the thread no longer owns the
-            # connection.
+            # block ends. Afterwards the task no longer owns the connection.
             if return_after_use:
-                del self._task_connections[task_id]
+                del self._connections.current
                 await self._return_connection(connection)
 
     # Support async context usage
