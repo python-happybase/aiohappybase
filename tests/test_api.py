@@ -3,8 +3,10 @@ HappyBase tests.
 """
 
 import os
+import gc
 import random
 import asyncio as aio
+import logging
 from functools import wraps
 from typing import AsyncGenerator
 
@@ -46,7 +48,6 @@ def with_new_loop(func):
     return _wrapper
 
 
-@asynctest.strict
 class TestAPI(asynctest.TestCase):
 
     @classmethod
@@ -87,8 +88,8 @@ class TestAPI(asynctest.TestCase):
         await self.connection.open()
         self.table = self.connection.table(TEST_TABLE_NAME)
 
-    async def tearDown(self):
-        await self.connection.close()
+    def tearDown(self):
+        self.connection.close()
         del self.connection
         del self.table
 
@@ -103,19 +104,22 @@ class TestAPI(asynctest.TestCase):
     def test_autoconnect(self):
         conn = Connection(**connection_kwargs, autoconnect=True)
         self.assertTrue(conn.client._iprot.trans.is_open())
-        aio.get_event_loop().run_until_complete(conn.close())
-
-    async def test_async_autoconnect(self):
-        if not aio.get_event_loop().is_running():
-            return  # Running inside sync test cases
-        with self.assertRaises(RuntimeError):
-            Connection(**connection_kwargs, autoconnect=True)
+        conn.close()
 
     async def test_double_close(self):
         conn = Connection(**connection_kwargs)
         await conn.open()
-        await conn.close()
-        await conn.close()  # No error on second close
+        conn.close()
+        conn.close()  # No error on second close
+
+    async def test_no_close_warning(self):
+        conn = Connection(**connection_kwargs)
+        await conn.open()
+        client = conn.client  # Save so we can close later
+        with self.assertLogs(level=logging.WARNING):
+            del conn
+            gc.collect()
+        client.close()
 
     def test_connection_invalid_table_prefix(self):
         with self.assertRaises(TypeError):
@@ -637,6 +641,12 @@ class TestAPI(asynctest.TestCase):
                 # so another task cannot obtain a connection.
                 await self._run_tasks(run)
 
+    async def test_pool_no_close_warning(self):
+        pool = ConnectionPool(size=1, **connection_kwargs)
+        with self.assertLogs(level=logging.WARNING):
+            del pool
+            gc.collect()
+
     @staticmethod
     def _run_tasks(func, count: int = 1):
         return aio.gather(*(func() for _ in range(count)))
@@ -647,8 +657,35 @@ class TestAPI(asynctest.TestCase):
         return f"Task {task_id}"
 
 
+class TestSyncInAsync(asynctest.TestCase):
+
+    async def test_sync_autoconnect(self):
+        with self.assertRaises(RuntimeError):
+            Connection(**connection_kwargs, autoconnect=True)
+
+    def test_sync_connection_context(self):
+        with Connection(**connection_kwargs) as conn:
+            self.assertTrue(conn.client._iprot.trans.is_open())
+
+    async def test_sync_connection_context_while_running(self):
+        with self.assertRaises(RuntimeError):
+            with Connection(**connection_kwargs):
+                pass
+
+    def test_sync_pool_context(self):
+        with ConnectionPool(size=1, **connection_kwargs) as pool:
+            self.assertIsNotNone(pool)
+
+    async def test_sync_pool_context_while_running(self):
+        # Get pool first so we can close it after and prevent the warning
+        pool = ConnectionPool(size=1, **connection_kwargs)
+        with self.assertRaises(RuntimeError):
+            with pool:
+                pass
+        pool.close()
+
+
 if __name__ == '__main__':
-    import logging
     import sys
 
     logging.basicConfig(level=logging.DEBUG)

@@ -153,11 +153,11 @@ class ConnectionPool:
         for i in range(size):
             self._queue.put_nowait(Connection(**kwargs))
 
-    async def close(self):
+    def close(self):
         """Clean up all pool connections and delete the queue."""
         while True:
             try:
-                await self._queue.get_nowait().close()
+                self._queue.get_nowait().close()
             except (aio.QueueEmpty, queue.Empty):
                 break
         del self._queue
@@ -223,7 +223,7 @@ class ConnectionPool:
             # occurred in the Thrift layer, since we don't know whether
             # the connection is still usable.
             logger.info("Replacing tainted pool connection")
-            await connection.close()
+            connection.close()
             await connection.open()
 
             # Reraise to caller; see contextlib.contextmanager() docs
@@ -241,17 +241,17 @@ class ConnectionPool:
         return self
 
     async def __aexit__(self, *_exc) -> None:
-        await self.close()
+        self.close()
 
     # Support context usage
-    def __enter__(self) -> 'ConnectionPool':  # pragma: no cover
+    def __enter__(self) -> 'ConnectionPool':
         if aio.get_event_loop().is_running():
             raise RuntimeError("Use async with inside a running event loop!")
         return self
 
-    def __exit__(self, *_exc) -> None:  # pragma: no cover
-        aio.get_event_loop().run_until_complete(self.close())
+    def __exit__(self, *_exc) -> None:
+        self.close()
 
-    def __del__(self) -> None:  # pragma: no cover
+    def __del__(self) -> None:
         if hasattr(self, '_queue'):
             logger.warning(f"{self} was not closed!")

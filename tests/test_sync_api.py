@@ -22,11 +22,6 @@ class TestSyncAPI(unittest.TestCase):
     def tearDownClass(cls):
         cls.destroy_table()
 
-    def test_autoconnect(self):
-        conn = Connection(**connection_kwargs, autoconnect=True)
-        self.assertTrue(conn.client._iprot.trans.is_open())
-        conn.close()
-
     @staticmethod
     def _run_tasks(func, count: int = 1):
         threads = [Thread(target=func) for _ in range(count)]

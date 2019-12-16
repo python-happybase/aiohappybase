@@ -187,7 +187,7 @@ class Connection:
         logger.debug(f"Opening Thrift transport to {self.host}:{self.port}")
         await self._refresh_thrift_client()
 
-    async def close(self) -> None:
+    def close(self) -> None:
         """
         Close the underlying client to the HBase instance. This method
         can be safely called more than once. Note that the client is
@@ -378,20 +378,20 @@ class Connection:
         return self
 
     async def __aexit__(self, *_exc) -> None:
-        await self.close()
+        self.close()
 
     # Support context usage
-    def __enter__(self) -> 'Connection':  # pragma: no cover
-        try:
-            aio.get_event_loop().run_until_complete(self.open())
-        except RuntimeError:
+    def __enter__(self) -> 'Connection':
+        loop = aio.get_event_loop()
+        if loop.is_running():
             raise RuntimeError("Use async with inside a running event loop!")
+        loop.run_until_complete(self.open())
         return self
 
-    def __exit__(self, *_exc) -> None:  # pragma: no cover
-        aio.get_event_loop().run_until_complete(self.close())
+    def __exit__(self, *_exc) -> None:
+        self.close()
 
-    def __del__(self) -> None:  # pragma: no cover
+    def __del__(self) -> None:
         try:
             if self.client._iprot.trans.is_open():  # noqa
                 logger.warning(f"{self} was not closed!")
