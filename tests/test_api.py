@@ -7,7 +7,7 @@ import gc
 import random
 import asyncio as aio
 import logging
-from functools import wraps
+from functools import wraps, partial
 from typing import AsyncGenerator
 
 import asynctest
@@ -186,12 +186,12 @@ class TestAPI(asynctest.TestCase):
         self.assertIsInstance(regions, list)
 
     async def test_invalid_table_create(self):
+        create_table = partial(self.connection.create_table, 'sometable')
         with self.assertRaises(ValueError):
-            await self.connection.create_table('sometable', families={})
-        with self.assertRaises(TypeError):
-            await self.connection.create_table('sometable', families=0)  # noqa
-        with self.assertRaises(TypeError):
-            await self.connection.create_table('sometable', families=[])  # noqa
+            await create_table(families={})
+        for fam in [0, []]:
+            with self.assertRaises(TypeError):
+                await create_table(families=fam)  # noqa
 
     async def test_families(self):
         families = await self.table.families()
