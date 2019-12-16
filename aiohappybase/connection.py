@@ -202,6 +202,7 @@ class Connection:
             logger.debug(f"Closing Thrift transport to {self.host}:{self.port}")
 
         self.client.close()
+        self.client = None
 
     def table(self, name: AnyStr, use_prefix: bool = True) -> Table:
         """
