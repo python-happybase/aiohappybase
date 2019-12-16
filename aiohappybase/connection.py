@@ -4,14 +4,12 @@ AIOHappyBase connection module.
 
 import logging
 import asyncio as aio
-import inspect
 from typing import AnyStr, List, Dict, Any
 
 from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocolFactory
 from thriftpy2.contrib.aio.transport.buffered \
     import TAsyncBufferedTransportFactory
-from thriftpy2.contrib.aio.socket import TAsyncSocket
-from thriftpy2.contrib.aio.client import TAsyncClient
+from thriftpy2.contrib.aio.rpc import make_client
 
 from Hbase_thrift import Hbase, ColumnDescriptor
 
@@ -105,8 +103,7 @@ class Connection:
     THRIFT_PROTOCOLS = dict(
         binary=TAsyncBinaryProtocolFactory(decode_response=False),
     )
-    THRIFT_SOCKET = TAsyncSocket
-    THRIFT_CLIENT = TAsyncClient
+    THRIFT_CLIENT_FACTORY = staticmethod(make_client)
 
     def __init__(self,
                  host: str = DEFAULT_HOST,
@@ -146,7 +143,7 @@ class Connection:
         self._transport_factory = self.THRIFT_TRANSPORTS[transport]
         self._protocol_factory = self.THRIFT_PROTOCOLS[protocol]
 
-        self._refresh_thrift_client()
+        self.client = None
 
         if autoconnect:
             self._autoconnect()
@@ -160,16 +157,17 @@ class Connection:
         else:
             loop.run_until_complete(self.open())
 
-    def _refresh_thrift_client(self) -> None:
+    async def _refresh_thrift_client(self) -> None:
         """Refresh the Thrift socket, transport, and client."""
         # TODO: Support all kwargs to make_client
-        socket = self.THRIFT_SOCKET(
-            self.host, self.port,
+        self.client = await self.THRIFT_CLIENT_FACTORY(
+            service=Hbase,
+            host=self.host,
+            port=self.port,
             socket_timeout=self.timeout,
+            trans_factory=self._transport_factory,
+            proto_factory=self._protocol_factory,
         )
-        self.transport = self._transport_factory.get_transport(socket)
-        protocol = self._protocol_factory.get_protocol(self.transport)
-        self.client = self.THRIFT_CLIENT(Hbase, protocol)
 
     def _table_name(self, name: AnyStr) -> bytes:
         """Construct a table name by optionally adding a table name prefix."""
@@ -184,11 +182,11 @@ class Connection:
 
         This method opens the underlying Thrift transport (TCP connection).
         """
-        if self.transport.is_open():
-            return
+        if self.client is not None:
+            return  # _refresh_thrift_client opened the transport
 
         logger.debug(f"Opening Thrift transport to {self.host}:{self.port}")
-        await self.transport.open()
+        await self._refresh_thrift_client()
 
     async def close(self) -> None:
         """
@@ -196,16 +194,14 @@ class Connection:
 
         This method closes the underlying Thrift transport (TCP connection).
         """
-        if not self.transport.is_open():
+        if self.client is None:
             return
 
         if logger is not None:
             # If called from __del__(), module variables may no longer exist.
             logger.debug(f"Closing Thrift transport to {self.host}:{self.port}")
 
-        closer = self.transport.close()
-        if inspect.isawaitable(closer):  # Allow async close methods
-            await closer  # pragma: no cover (No current transports use this)
+        self.client.close()
 
     def table(self, name: AnyStr, use_prefix: bool = True) -> Table:
         """

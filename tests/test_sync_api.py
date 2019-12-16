@@ -24,7 +24,7 @@ class TestSyncAPI(unittest.TestCase):
 
     def test_autoconnect(self):
         conn = Connection(**connection_kwargs, autoconnect=True)
-        self.assertTrue(conn.transport.is_open())
+        self.assertTrue(conn.client._iprot.trans.is_open())
         conn.close()
 
     @staticmethod
