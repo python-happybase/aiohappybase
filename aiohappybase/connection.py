@@ -7,8 +7,9 @@ import asyncio as aio
 import inspect
 from typing import AnyStr, List, Dict, Any
 
-from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocol
-from thriftpy2.contrib.aio.transport.buffered import TAsyncBufferedTransport
+from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocolFactory
+from thriftpy2.contrib.aio.transport.buffered \
+    import TAsyncBufferedTransportFactory
 from thriftpy2.contrib.aio.socket import TAsyncSocket
 from thriftpy2.contrib.aio.client import TAsyncClient
 
@@ -99,10 +100,10 @@ class Connection:
     """
     # TODO: Auto generate these?
     THRIFT_TRANSPORTS = dict(
-        buffered=TAsyncBufferedTransport,
+        buffered=TAsyncBufferedTransportFactory(),
     )
     THRIFT_PROTOCOLS = dict(
-        binary=TAsyncBinaryProtocol,
+        binary=TAsyncBinaryProtocolFactory(decode_response=False),
     )
     THRIFT_SOCKET = TAsyncSocket
     THRIFT_CLIENT = TAsyncClient
@@ -142,15 +143,13 @@ class Connection:
         self.table_prefix_separator = table_prefix_separator
         self.compat = compat
 
-        self._transport_class = self.THRIFT_TRANSPORTS[transport]
-        self._protocol_class = self.THRIFT_PROTOCOLS[protocol]
+        self._transport_factory = self.THRIFT_TRANSPORTS[transport]
+        self._protocol_factory = self.THRIFT_PROTOCOLS[protocol]
 
         self._refresh_thrift_client()
 
         if autoconnect:
             self._autoconnect()
-
-        self._initialized = True
 
     def _autoconnect(self):
         loop = aio.get_event_loop()
@@ -168,8 +167,8 @@ class Connection:
             self.host, self.port,
             socket_timeout=self.timeout,
         )
-        self.transport = self._transport_class(socket)
-        protocol = self._protocol_class(self.transport, decode_response=False)
+        self.transport = self._transport_factory.get_transport(socket)
+        protocol = self._protocol_factory.get_protocol(self.transport)
         self.client = self.THRIFT_CLIENT(Hbase, protocol)
 
     def _table_name(self, name: AnyStr) -> bytes:
