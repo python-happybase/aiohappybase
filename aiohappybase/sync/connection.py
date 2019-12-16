@@ -36,3 +36,8 @@ class Connection:
 
     def _autoconnect(self):
         self.open()
+
+
+# Set the default value for autoconnect to True for backwards compatibility
+_d = Connection.__init__.__defaults__
+Connection.__init__.__defaults__ = *_d[:3], True, *_d[4:]
