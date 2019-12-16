@@ -4,22 +4,19 @@ AIOHappyBase connection module.
 
 import logging
 import asyncio as aio
-import inspect
 from typing import AnyStr, List, Dict, Any
 
-from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocol
-from thriftpy2.contrib.aio.transport.buffered import TAsyncBufferedTransport
-from thriftpy2.contrib.aio.socket import TAsyncSocket
-from thriftpy2.contrib.aio.client import TAsyncClient
+from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocolFactory
+from thriftpy2.contrib.aio.transport.buffered \
+    import TAsyncBufferedTransportFactory
+from thriftpy2.contrib.aio.rpc import make_client
 
 from Hbase_thrift import Hbase, ColumnDescriptor
 
 from .table import Table
-from ._util import ensure_bytes, pep8_to_camel_case
+from ._util import ensure_bytes, pep8_to_camel_case, check_invalid_items
 
 logger = logging.getLogger(__name__)
-
-STRING_OR_BINARY = (str, bytes)
 
 COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
 
@@ -101,44 +98,38 @@ class Connection:
     """
     # TODO: Auto generate these?
     THRIFT_TRANSPORTS = dict(
-        buffered=TAsyncBufferedTransport,
+        buffered=TAsyncBufferedTransportFactory(),
     )
     THRIFT_PROTOCOLS = dict(
-        binary=TAsyncBinaryProtocol,
+        binary=TAsyncBinaryProtocolFactory(decode_response=False),
     )
-    THRIFT_SOCKET = TAsyncSocket
-    THRIFT_CLIENT = TAsyncClient
+    THRIFT_CLIENT_FACTORY = staticmethod(make_client)
 
     def __init__(self,
                  host: str = DEFAULT_HOST,
                  port: int = DEFAULT_PORT,
                  timeout: int = None,
                  autoconnect: bool = False,
-                 table_prefix: str = None,
-                 table_prefix_separator: bytes = b'_',
+                 table_prefix: AnyStr = None,
+                 table_prefix_separator: AnyStr = b'_',
                  compat: str = DEFAULT_COMPAT,
                  transport: str = DEFAULT_TRANSPORT,
                  protocol: str = DEFAULT_PROTOCOL):
 
-        if transport not in self.THRIFT_TRANSPORTS:
-            raise ValueError(
-                f"'transport' not in {list(self.THRIFT_TRANSPORTS)}"
-            )
-
         if table_prefix is not None:
-            if not isinstance(table_prefix, STRING_OR_BINARY):
+            if not isinstance(table_prefix, (str, bytes)):
                 raise TypeError("'table_prefix' must be a string")
             table_prefix = ensure_bytes(table_prefix)
 
-        if not isinstance(table_prefix_separator, STRING_OR_BINARY):
+        if not isinstance(table_prefix_separator, (str, bytes)):
             raise TypeError("'table_prefix_separator' must be a string")
         table_prefix_separator = ensure_bytes(table_prefix_separator)
 
-        if compat not in COMPAT_MODES:
-            raise ValueError(f"'compat' not in {list(COMPAT_MODES)}")
-
-        if protocol not in self.THRIFT_PROTOCOLS:
-            raise ValueError(f"'protocol' not in {list(self.THRIFT_PROTOCOLS)}")
+        check_invalid_items(
+            compat=(compat, COMPAT_MODES),
+            transport=(transport, self.THRIFT_TRANSPORTS),
+            protocol=(protocol, self.THRIFT_PROTOCOLS),
+        )
 
         # Allow host and port to be None, which may be easier for
         # applications wrapping a Connection instance.
@@ -149,15 +140,13 @@ class Connection:
         self.table_prefix_separator = table_prefix_separator
         self.compat = compat
 
-        self._transport_class = self.THRIFT_TRANSPORTS[transport]
-        self._protocol_class = self.THRIFT_PROTOCOLS[protocol]
+        self._transport_factory = self.THRIFT_TRANSPORTS[transport]
+        self._protocol_factory = self.THRIFT_PROTOCOLS[protocol]
 
-        self._refresh_thrift_client()
+        self.client = None
 
         if autoconnect:
             self._autoconnect()
-
-        self._initialized = True
 
     def _autoconnect(self):
         loop = aio.get_event_loop()
@@ -168,16 +157,17 @@ class Connection:
         else:
             loop.run_until_complete(self.open())
 
-    def _refresh_thrift_client(self) -> None:
+    async def _refresh_thrift_client(self) -> None:
         """Refresh the Thrift socket, transport, and client."""
         # TODO: Support all kwargs to make_client
-        socket = self.THRIFT_SOCKET(
-            self.host, self.port,
+        self.client = await self.THRIFT_CLIENT_FACTORY(
+            service=Hbase,
+            host=self.host,
+            port=self.port,
             socket_timeout=self.timeout,
+            trans_factory=self._transport_factory,
+            proto_factory=self._protocol_factory,
         )
-        self.transport = self._transport_class(socket)
-        protocol = self._protocol_class(self.transport, decode_response=False)
-        self.client = self.THRIFT_CLIENT(Hbase, protocol)
 
     def _table_name(self, name: AnyStr) -> bytes:
         """Construct a table name by optionally adding a table name prefix."""
@@ -187,15 +177,16 @@ class Connection:
         return self.table_prefix + self.table_prefix_separator + name
 
     async def open(self) -> None:
-        """Open the underlying transport to the HBase instance.
+        """
+        Open the underlying transport to the HBase instance.
 
         This method opens the underlying Thrift transport (TCP connection).
         """
-        if self.transport.is_open():
-            return
+        if self.client is not None:
+            return  # _refresh_thrift_client opened the transport
 
         logger.debug(f"Opening Thrift transport to {self.host}:{self.port}")
-        await self.transport.open()
+        await self._refresh_thrift_client()
 
     async def close(self) -> None:
         """
@@ -203,18 +194,14 @@ class Connection:
 
         This method closes the underlying Thrift transport (TCP connection).
         """
-        if not self.transport.is_open():
+        if self.client is None:
             return
 
         if logger is not None:
             # If called from __del__(), module variables may no longer exist.
             logger.debug(f"Closing Thrift transport to {self.host}:{self.port}")
 
-        closer = self.transport.close()
-        if inspect.isawaitable(closer):  # Allow async close methods
-            await closer  # pragma: no cover (No current transports use this)
-        # Socket isn't really closed yet, wait for it
-        await aio.sleep(0)
+        self.client.close()
 
     def table(self, name: AnyStr, use_prefix: bool = True) -> Table:
         """
