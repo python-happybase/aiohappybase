@@ -15,11 +15,9 @@ from thriftpy2.contrib.aio.client import TAsyncClient
 from Hbase_thrift import Hbase, ColumnDescriptor
 
 from .table import Table
-from ._util import ensure_bytes, pep8_to_camel_case
+from ._util import ensure_bytes, pep8_to_camel_case, check_invalid_items
 
 logger = logging.getLogger(__name__)
-
-STRING_OR_BINARY = (str, bytes)
 
 COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
 
@@ -114,31 +112,26 @@ class Connection:
                  port: int = DEFAULT_PORT,
                  timeout: int = None,
                  autoconnect: bool = False,
-                 table_prefix: str = None,
-                 table_prefix_separator: bytes = b'_',
+                 table_prefix: AnyStr = None,
+                 table_prefix_separator: AnyStr = b'_',
                  compat: str = DEFAULT_COMPAT,
                  transport: str = DEFAULT_TRANSPORT,
                  protocol: str = DEFAULT_PROTOCOL):
 
-        if transport not in self.THRIFT_TRANSPORTS:
-            raise ValueError(
-                f"'transport' not in {list(self.THRIFT_TRANSPORTS)}"
-            )
-
         if table_prefix is not None:
-            if not isinstance(table_prefix, STRING_OR_BINARY):
+            if not isinstance(table_prefix, (str, bytes)):
                 raise TypeError("'table_prefix' must be a string")
             table_prefix = ensure_bytes(table_prefix)
 
-        if not isinstance(table_prefix_separator, STRING_OR_BINARY):
+        if not isinstance(table_prefix_separator, (str, bytes)):
             raise TypeError("'table_prefix_separator' must be a string")
         table_prefix_separator = ensure_bytes(table_prefix_separator)
 
-        if compat not in COMPAT_MODES:
-            raise ValueError(f"'compat' not in {list(COMPAT_MODES)}")
-
-        if protocol not in self.THRIFT_PROTOCOLS:
-            raise ValueError(f"'protocol' not in {list(self.THRIFT_PROTOCOLS)}")
+        check_invalid_items(
+            compat=(compat, COMPAT_MODES),
+            transport=(transport, self.THRIFT_TRANSPORTS),
+            protocol=(protocol, self.THRIFT_PROTOCOLS),
+        )
 
         # Allow host and port to be None, which may be easier for
         # applications wrapping a Connection instance.
@@ -187,7 +180,8 @@ class Connection:
         return self.table_prefix + self.table_prefix_separator + name
 
     async def open(self) -> None:
-        """Open the underlying transport to the HBase instance.
+        """
+        Open the underlying transport to the HBase instance.
 
         This method opens the underlying Thrift transport (TCP connection).
         """
@@ -213,8 +207,6 @@ class Connection:
         closer = self.transport.close()
         if inspect.isawaitable(closer):  # Allow async close methods
             await closer  # pragma: no cover (No current transports use this)
-        # Socket isn't really closed yet, wait for it
-        await aio.sleep(0)
 
     def table(self, name: AnyStr, use_prefix: bool = True) -> Table:
         """

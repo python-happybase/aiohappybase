@@ -13,6 +13,7 @@ from typing import (
     Optional,
     TypeVar,
     Callable,
+    Iterable,
 )
 
 from Hbase_thrift import TRowResult, TCell
@@ -137,3 +138,18 @@ def _get_cell_map(row: TRowResult) -> Dict[bytes, TCell]:
         return row.columns
     else:  # pragma: no cover
         raise RuntimeError("Neither columns nor sortedColumns is available!")
+
+
+def check_invalid_items(**kwargs: Tuple[T, Iterable[T]]):
+    """
+    Check if a parameter's value is within a valid set of values. Multiple
+    parameters can be checked at once.
+
+    :param kwargs:
+        Parameter names mapped to tuples of actual value and possible values.
+    :raises ValueError: If a parameter value is not valid
+    """
+    for key, (value, possible) in kwargs.items():
+        possible = set(possible)
+        if value not in possible:
+            raise ValueError(f"{key}={value} is not in: {possible}")

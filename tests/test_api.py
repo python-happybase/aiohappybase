@@ -98,17 +98,30 @@ class TestAPI(asynctest.TestCase):
     async def _scan_len(self, scanner: AsyncGenerator = None, **kwargs) -> int:
         if scanner is None:
             scanner = self.table.scan(**kwargs)
-        i = 0
-        async for _ in scanner:
-            i += 1
-        return i
+        return sum([1 async for _ in scanner])
 
     def test_autoconnect(self):
         conn = Connection(**connection_kwargs, autoconnect=True)
         self.assertTrue(conn.transport.is_open())
         aio.get_event_loop().run_until_complete(conn.close())
 
-    def test_connection_compat(self):
+    def test_connection_invalid_table_prefix(self):
+        with self.assertRaises(TypeError):
+            Connection(table_prefix=1)  # noqa Not a string
+
+    def test_connection_invalid_table_prefix_sep(self):
+        with self.assertRaises(TypeError):
+            Connection(table_prefix_separator=1)  # noqa Not a string
+
+    def test_connection_invalid_transport(self):
+        with self.assertRaises(ValueError):
+            Connection(transport='millennium')
+
+    def test_connection_invalid_protocol(self):
+        with self.assertRaises(ValueError):
+            Connection(protocol='falcon')
+
+    def test_connection_invalid_compat(self):
         with self.assertRaises(ValueError):
             Connection(compat='0.1.invalid.version')
 
