@@ -52,6 +52,17 @@ class TestUtil(ut.TestCase):
             self.assertEqual(expected, v_hex)
             self.assertLess(s, v)
 
+    def test_ensure_bytes(self):
+        self.assertIsInstance(util.ensure_bytes('str'), bytes)
+        self.assertEqual(util.ensure_bytes('str'), b'str')
+
+        self.assertIsInstance(util.ensure_bytes(b'bytes'), bytes)
+        self.assertEqual(util.ensure_bytes(b'bytes'), b'bytes')
+
+        for x in [1, ('test',), float('inf')]:
+            with self.assertRaises(TypeError):
+                util.ensure_bytes(x)
+
     def test_remove_async(self):
         r = sync_util._remove_async
         eq = self.assertEqual

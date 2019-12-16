@@ -65,7 +65,7 @@ class TestAPI(asynctest.TestCase):
             assert conn is not None
 
             tables = await conn.tables()
-            if TEST_TABLE_NAME in tables:  # pragma: nocover
+            if TEST_TABLE_NAME in tables:  # pragma: no cover
                 print("Test table already exists; removing it...")
                 await conn.delete_table(TEST_TABLE_NAME, disable=True)
 
@@ -104,6 +104,18 @@ class TestAPI(asynctest.TestCase):
         conn = Connection(**connection_kwargs, autoconnect=True)
         self.assertTrue(conn.client._iprot.trans.is_open())
         aio.get_event_loop().run_until_complete(conn.close())
+
+    async def test_async_autoconnect(self):
+        if not aio.get_event_loop().is_running():
+            return  # Running inside sync test cases
+        with self.assertRaises(RuntimeError):
+            Connection(**connection_kwargs, autoconnect=True)
+
+    async def test_double_close(self):
+        conn = Connection(**connection_kwargs)
+        await conn.open()
+        await conn.close()
+        await conn.close()  # No error on second close
 
     def test_connection_invalid_table_prefix(self):
         with self.assertRaises(TypeError):
@@ -404,8 +416,18 @@ class TestAPI(asynctest.TestCase):
             with self.assertRaises(NotImplementedError):
                 await self._scan_list(filter='foo')
 
+        if self.connection.compat < '0.96':
+            with self.assertRaises(NotImplementedError):
+                await self._scan_list(sorted_columns=True)
+
+        with self.assertRaises(ValueError):
+            await self._scan_list(batch_size=0)
+
         with self.assertRaises(ValueError):
             await self._scan_list(limit=0)
+
+        with self.assertRaises(ValueError):
+            await self._scan_list(scan_batching=0)
 
         async with self.table.batch() as b:
             for i in range(2000):
@@ -607,7 +629,7 @@ class TestAPI(asynctest.TestCase):
         async def run():
             with self.assertRaises(NoConnectionsAvailable):
                 async with pool.connection(timeout=.1) as _connection:
-                    self.fail("Connection available???")  # pragma: nocover
+                    self.fail("Connection available???")  # pragma: no cover
 
         async with ConnectionPool(size=1, **connection_kwargs) as pool:
             async with pool.connection():

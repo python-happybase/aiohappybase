@@ -93,7 +93,7 @@ class TaskLocal:
     def __delattr__(self, item: str) -> None:
         try:
             del self._task_data[item]
-        except KeyError:
+        except KeyError:  # pragma: no cover
             raise AttributeError(item)
 
 
