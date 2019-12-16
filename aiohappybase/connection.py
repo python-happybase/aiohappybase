@@ -178,9 +178,8 @@ class Connection:
 
     async def open(self) -> None:
         """
-        Open the underlying transport to the HBase instance.
-
-        This method opens the underlying Thrift transport (TCP connection).
+        Create and open the underlying client to the HBase instance. This
+        method can safely be called more than once.
         """
         if self.client is not None:
             return  # _refresh_thrift_client opened the transport
@@ -190,9 +189,11 @@ class Connection:
 
     async def close(self) -> None:
         """
-        Close the underlying transport to the HBase instance.
-
-        This method closes the underlying Thrift transport (TCP connection).
+        Close the underlying client to the HBase instance. This method
+        can be safely called more than once. Note that the client is
+        destroyed after it is closed which will cause errors to occur
+        if it is used again before reopening. The :py:class:`Connection`
+        can be reopened by calling :py:meth:`open` again.
         """
         if self.client is None:
             return

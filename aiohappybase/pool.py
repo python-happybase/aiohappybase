@@ -223,7 +223,7 @@ class ConnectionPool:
             # occurred in the Thrift layer, since we don't know whether
             # the connection is still usable.
             logger.info("Replacing tainted pool connection")
-            connection.client = None  # Force refresh on open()
+            await connection.close()
             await connection.open()
 
             # Reraise to caller; see contextlib.contextmanager() docs
