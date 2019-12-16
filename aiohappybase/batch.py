@@ -155,8 +155,8 @@ class Batch:
         await self.close()
 
     # Guard against porting mistakes
-    def __enter__(self):
+    def __enter__(self):  # pragma: no cover
         raise RuntimeError("Use async with")
 
-    def __exit__(self, *_exc):
+    def __exit__(self, *_exc):  # pragma: no cover
         raise RuntimeError("Use async with")

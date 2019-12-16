@@ -379,19 +379,19 @@ class Connection:
         await self.close()
 
     # Support context usage
-    def __enter__(self) -> 'Connection':
+    def __enter__(self) -> 'Connection':  # pragma: no cover
         try:
             aio.get_event_loop().run_until_complete(self.open())
         except RuntimeError:
             raise RuntimeError("Use async with inside a running event loop!")
         return self
 
-    def __exit__(self, *_exc) -> None:
+    def __exit__(self, *_exc) -> None:  # pragma: no cover
         aio.get_event_loop().run_until_complete(self.close())
 
-    def __del__(self) -> None:
+    def __del__(self) -> None:  # pragma: no cover
         try:
-            if self.transport.is_open():
+            if self.client._iprot.trans.is_open():  # noqa
                 logger.warning(f"{self} was not closed!")
         except:  # noqa
             pass

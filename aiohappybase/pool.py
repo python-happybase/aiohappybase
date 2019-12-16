@@ -244,14 +244,14 @@ class ConnectionPool:
         await self.close()
 
     # Support context usage
-    def __enter__(self) -> 'ConnectionPool':
+    def __enter__(self) -> 'ConnectionPool':  # pragma: no cover
         if aio.get_event_loop().is_running():
             raise RuntimeError("Use async with inside a running event loop!")
         return self
 
-    def __exit__(self, *_exc) -> None:
+    def __exit__(self, *_exc) -> None:  # pragma: no cover
         aio.get_event_loop().run_until_complete(self.close())
 
-    def __del__(self) -> None:
+    def __del__(self) -> None:  # pragma: no cover
         if hasattr(self, '_queue'):
             logger.warning(f"{self} was not closed!")
