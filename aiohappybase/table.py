@@ -66,7 +66,7 @@ class Table:
         descriptors = await self._column_family_descriptors()
         return map_dict(descriptors, values=thrift_type_to_dict)
 
-    async def _column_family_names(self) -> List[bytes]:
+    async def column_family_names(self) -> List[bytes]:
         """Retrieve the column family names for this table"""
         return list(await self._column_family_descriptors())
 
@@ -176,7 +176,7 @@ class Table:
             # timestamp is only applied if columns are specified, at
             # the cost of an extra round-trip.
             if columns is None:
-                columns = await self._column_family_names()
+                columns = await self.column_family_names()
 
             results = await self.client.getRowsWithColumnsTs(
                 self.name, rows, columns, timestamp, {})

@@ -119,7 +119,7 @@ class Batch:
         # batch instance.
         if columns is None:
             if self._families is None:
-                self._families = await self._table._column_family_names()
+                self._families = await self._table.column_family_names()
             columns = self._families
 
         if wal is None:
