@@ -479,6 +479,8 @@ class Table:
         """
         Append data to an existing row.
 
+        * This function is only available when using HBase 0.98 (or up).
+
         The `data` argument behaves just like it does in :py:meth:`put`
         except that instead of replacing the current values, they are
         appended to the end. If a specified cell doesn't exist, then the
