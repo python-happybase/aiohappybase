@@ -2,6 +2,7 @@
 AIOHappyBase connection module.
 """
 
+import os
 import logging
 import asyncio as aio
 from typing import AnyStr, List, Dict, Any
@@ -20,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
 
-DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 9090
-DEFAULT_TRANSPORT = 'buffered'
-DEFAULT_COMPAT = '0.98'
-DEFAULT_PROTOCOL = 'binary'
+DEFAULT_HOST = os.environ.get('AIOHAPPYBASE_HOST', 'localhost')
+DEFAULT_PORT = int(os.environ.get('AIOHAPPYBASE_PORT', '9090'))
+DEFAULT_COMPAT = os.environ.get('AIOHAPPYBASE_COMPAT', '0.98')
+DEFAULT_TRANSPORT = os.environ.get('AIOHAPPYBASE_TRANSPORT', 'buffered')
+DEFAULT_PROTOCOL = os.environ.get('AIOHAPPYBASE_PROTOCOL', 'binary')
 
 
 class Connection:

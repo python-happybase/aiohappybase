@@ -2,7 +2,6 @@
 HappyBase tests.
 """
 
-import os
 import gc
 import random
 import asyncio as aio
@@ -17,21 +16,10 @@ from thriftpy2.thrift import TException
 from aiohappybase import Connection, ConnectionPool, NoConnectionsAvailable
 from aiohappybase.pool import current_task  # Easiest way to get the right one
 
-AIOHAPPYBASE_HOST = os.environ.get('AIOHAPPYBASE_HOST', 'localhost')
-AIOHAPPYBASE_PORT = int(os.environ.get('AIOHAPPYBASE_PORT', '9090'))
-AIOHAPPYBASE_COMPAT = os.environ.get('AIOHAPPYBASE_COMPAT', '0.98')
-AIOHAPPYBASE_TRANSPORT = os.environ.get('AIOHAPPYBASE_TRANSPORT', 'buffered')
-
 TABLE_PREFIX = b'happybase_tests_tmp'
 TEST_TABLE_NAME = b'test1'
 
-connection_kwargs = dict(
-    host=AIOHAPPYBASE_HOST,
-    port=AIOHAPPYBASE_PORT,
-    table_prefix=TABLE_PREFIX,
-    compat=AIOHAPPYBASE_COMPAT,
-    transport=AIOHAPPYBASE_TRANSPORT,
-)
+connection_kwargs = {'table_prefix': TABLE_PREFIX}
 
 
 def with_new_loop(func):
