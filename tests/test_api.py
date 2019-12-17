@@ -201,27 +201,27 @@ class TestAPI(asynctest.TestCase):
         row = b'row-with-counter'
         column = b'cf1:counter'
 
-        get = self.table.counter_get
-        inc = self.table.counter_inc
-        dec = self.table.counter_dec
+        get = partial(self.table.counter_get, row, column)
+        inc = partial(self.table.counter_inc, row, column)
+        dec = partial(self.table.counter_dec, row, column)
 
-        self.assertEqual(0, await get(row, column))
+        self.assertEqual(0, await get())
 
-        self.assertEqual(10, await inc(row, column, 10))
-        self.assertEqual(10, await get(row, column))
+        self.assertEqual(10, await inc(10))
+        self.assertEqual(10, await get())
 
         await self.table.counter_set(row, column, 0)
-        self.assertEqual(1, await inc(row, column))
-        self.assertEqual(4, await inc(row, column, 3))
-        self.assertEqual(4, await get(row, column))
+        self.assertEqual(1, await inc())
+        self.assertEqual(4, await inc(3))
+        self.assertEqual(4, await get())
 
         await self.table.counter_set(row, column, 3)
-        self.assertEqual(3, await get(row, column))
-        self.assertEqual(8, await inc(row, column, 5))
-        self.assertEqual(6, await inc(row, column, -2))
-        self.assertEqual(5, await dec(row, column))
-        self.assertEqual(3, await dec(row, column, 2))
-        self.assertEqual(10, await dec(row, column, -7))
+        self.assertEqual(3, await get())
+        self.assertEqual(8, await inc(5))
+        self.assertEqual(6, await inc(-2))
+        self.assertEqual(5, await dec())
+        self.assertEqual(3, await dec(2))
+        self.assertEqual(10, await dec(-7))
 
     async def test_batch(self):
         with self.assertRaises(TypeError):
@@ -294,6 +294,43 @@ class TestAPI(asynctest.TestCase):
             for i in range(95):
                 await b.delete(f'row-batch2-{i:03}'.encode('ascii'))
         self.assertEqual(0, await self._scan_len(row_prefix=b'row-batch2-'))
+
+    async def test_batch_counters(self):
+        row = b'row-with-counter'
+        col1 = b'cf1:counter1'
+        col2 = b'cf1:counter2'
+
+        get = partial(self.table.counter_get, row)
+
+        async def check_cols(c1: int, c2: int):
+            for col, val in [(col1, c1), (col2, c2)]:
+                self.assertEqual(await get(col), val)
+
+        async with self.table.batch() as b:
+            inc = partial(b.counter_inc, row)
+            dec = partial(b.counter_dec, row)
+            await inc(col1, 1)  # c1 == 1, c2 == 0
+            await inc(col1, 2)  # c1 == 3, c2 == 0
+            await dec(col2, 2)  # c1 == 3, c2 == -2
+            await dec(col1, 1)  # c1 == 2, c2 == -2
+            await inc(col2, 5)  # c1 == 2, c2 == 3
+            # Make sure nothing was sent yet
+            await check_cols(0, 0)
+
+        await check_cols(2, 3)
+
+        for c in [col1, col2]:
+            await self.table.counter_set(row, c, 0)
+        await check_cols(0, 0)
+
+        async with self.table.batch(batch_size=2) as b:
+            inc = partial(b.counter_inc, row)
+            await inc(col1, 1)
+            await check_cols(0, 0)  # Not sent yet
+            await inc(col1, 1)
+            await check_cols(0, 0)  # Same column modified twice, not sent
+            await inc(col2, 1)  # Forces send since batch count >= 2
+            await check_cols(2, 1)
 
     async def test_row(self):
         row = self.table.row
@@ -671,6 +708,18 @@ class TestSyncInAsync(asynctest.TestCase):
             with pool:
                 pass
         pool.close()
+
+    async def test_sync_batch_context(self):
+        async with Connection(**connection_kwargs) as conn:
+            table = conn.table(TEST_TABLE_NAME)
+            with self.assertRaises(RuntimeError):
+                with table.batch():
+                    pass
+            with self.assertRaises(RuntimeError):
+                table.batch().__enter__()
+            batch = await table.batch().__aenter__()
+            with self.assertRaises(RuntimeError):
+                batch.__exit__()
 
 
 if __name__ == '__main__':

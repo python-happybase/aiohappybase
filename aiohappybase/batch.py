@@ -3,12 +3,13 @@ AIOHappyBase Batch module.
 """
 
 import logging
+import abc
 from typing import TYPE_CHECKING, Dict, List, Iterable, Type
 from functools import partial
 from collections import defaultdict
 from numbers import Integral
 
-from Hbase_thrift import BatchMutation, Mutation
+from Hbase_thrift import BatchMutation, Mutation, TIncrement
 
 if TYPE_CHECKING:
     from .table import Table  # Avoid circular import
@@ -16,59 +17,76 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Batch:
+class Batcher(abc.ABC):
     """
-    Batch mutation class.
+    Generic base class for management of batch operations. Implementations
+    should handle buffering operations, converting the operations to
+    Thrift data structures, and sending the data to the server.
 
-    This class cannot be instantiated directly;
-    use :py:meth:`Table.batch` instead.
+    :py:class:`Batch` will wrap multiple :py:class:`Batcher` instances and
+    expose their mutation methods as one API.
     """
+
+    def __init__(self, table: 'Table', batch_size: int = None):
+        self._table = table
+        self._batch_size = batch_size
+        self._reset()
+
+    @abc.abstractmethod
+    def _reset(self):
+        """Clear any queued data to send."""
+
+    @property
+    @abc.abstractmethod
+    def _batch_count(self) -> int:
+        """Current size of batch for comparison with :py:attr:`_batch_size`"""
+
+    @abc.abstractmethod
+    async def send(self):
+        """Send the current batch up to the server and clear local data."""
+
+    async def _check_send(self):
+        """Call :py:meth:`send` if :py:attr:`_batch_size` has been exceeded."""
+        if self._batch_size and self._batch_count >= self._batch_size:
+            await self.send()
+
+
+class MutationBatcher(Batcher):
+    """
+    Batcher implementation for handling column mutations via the
+   `mutateRows` and `mutateRowsTs` HBase Thrift endpoints.
+    """
+
     def __init__(self,
                  table: 'Table',
                  timestamp: int = None,
                  batch_size: int = None,
-                 transaction: bool = False,
                  wal: bool = True):
-        """Initialise a new Batch instance."""
-        if not (timestamp is None or isinstance(timestamp, Integral)):
-            raise TypeError("'timestamp' must be an integer or None")
-
-        if batch_size is not None:
-            if transaction:
-                raise TypeError("'transaction' can't be used with 'batch_size'")
-            if not batch_size > 0:
-                raise ValueError("'batch_size' must be > 0")
-
-        self._table = table
-        self._batch_size = batch_size
+        super().__init__(table, batch_size)
         self._timestamp = timestamp
-        self._transaction = transaction
         self._wal = wal
         self._families = None
-        self._reset_mutations()
 
         # Save mutator partial here to avoid the if check each time
         if self._timestamp is None:
-            self._mutate_rows = partial(
-                self._table.client.mutateRows,
-                self._table.name,
-                attributes={},
-            )
+            mut_rows = self._table.client.mutateRows
         else:
-            self._mutate_rows = partial(
+            mut_rows = partial(
                 self._table.client.mutateRowsTs,
-                self._table.name,
                 timestamp=self._timestamp,
-                attributes={},
             )
+        # Add standard arguments
+        self._mutate_rows = partial(mut_rows, self._table.name, attributes={})
 
-    def _reset_mutations(self) -> None:
-        """Reset the internal mutation buffer."""
+    def _reset(self):
         self._mutations = defaultdict(list)
         self._mutation_count = 0
 
+    @property
+    def _batch_count(self) -> int:
+        return self._mutation_count
+
     async def send(self) -> None:
-        """Send the batch to the server."""
         bms = [BatchMutation(row, m) for row, m in self._mutations.items()]
         if not bms:
             return
@@ -79,7 +97,7 @@ class Batch:
         )
 
         await self._mutate_rows(bms)
-        self._reset_mutations()
+        self._reset()
 
     async def put(self,
                   row: bytes,
@@ -133,8 +151,102 @@ class Batch:
     async def _add_mutations(self, row: bytes, mutations: List[Mutation]):
         self._mutations[row].extend(mutations)
         self._mutation_count += len(mutations)
-        if self._batch_size and self._mutation_count >= self._batch_size:
-            await self.send()
+        await self._check_send()
+
+
+class CounterBatcher(Batcher):
+    """
+    Batcher implementation for handling counter manipulations via the
+   `incrementRows` HBase Thrift endpoint.
+    """
+
+    def _reset(self):
+        self._counters = defaultdict(int)
+
+    @property
+    def _batch_count(self) -> int:
+        return len(self._counters)
+
+    async def counter_inc(self,
+                          row: bytes,
+                          column: bytes,
+                          value: int = 1) -> None:
+        """
+        Atomically increment (or decrements) a counter column.
+
+        See :py:meth:`Table.counter_inc` for parameter details. Note that
+        this method cannot return the current value because the change
+        is buffered until send to the server.
+        """
+        self._counters[(row, column)] += value
+        await self._check_send()
+
+    async def counter_dec(self,
+                          row: bytes,
+                          column: bytes,
+                          value: int = 1) -> None:
+        """
+        Atomically decrement (or increments) a counter column.
+
+        See :py:meth:`Table.counter_dec` for parameter details. Note that
+        this method cannot return the current value because the change
+        is buffered until send to the server.
+        """
+        await self.counter_inc(row, column, -value)
+
+    async def send(self) -> None:
+        increments = [
+            TIncrement(self._table.name, row, col, val)
+            for (row, col), val in self._counters.items()
+            if val != 0
+        ]
+        if not increments:
+            return
+        await self._table.client.incrementRows(increments)
+        self._reset()
+
+
+class Batch:
+    """
+    Batch mutation class.
+
+    This class cannot be instantiated directly;
+    use :py:meth:`Table.batch` instead.
+    """
+    def __init__(self,
+                 table: 'Table',
+                 timestamp: int = None,
+                 batch_size: int = None,
+                 transaction: bool = False,
+                 wal: bool = True):
+        """Initialise a new Batch instance."""
+        if not (timestamp is None or isinstance(timestamp, Integral)):
+            raise TypeError("'timestamp' must be an integer or None")
+
+        if batch_size is not None:
+            if transaction:
+                raise TypeError("'transaction' can't be used with 'batch_size'")
+            if not batch_size > 0:
+                raise ValueError("'batch_size' must be > 0")
+
+        self._table = table
+        self._batch_size = batch_size
+        self._transaction = transaction
+
+        self._mutations = MutationBatcher(table, timestamp, batch_size, wal)
+        # Expose mutation methods
+        self.put = self._mutations.put
+        self.delete = self._mutations.delete
+
+        self._counters = CounterBatcher(table, batch_size)
+        # Expose counter methods
+        self.counter_inc = self._counters.counter_inc
+        self.counter_dec = self._counters.counter_dec
+
+    async def send(self) -> None:
+        """Send the batch to the server."""
+        await self._mutations.send()
+        await self._counters.send()
 
     async def close(self) -> None:
         """Finalize the batch and make sure all tasks are completed."""

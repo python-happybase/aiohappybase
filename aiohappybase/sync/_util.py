@@ -6,13 +6,12 @@ from typing import Callable, TypeVar, Awaitable, Dict, Any, Tuple, Union
 from contextlib import contextmanager
 from types import FunctionType, CodeType
 from inspect import (
+    signature,
     getsourcefile,
     getsourcelines,
     iscoroutinefunction,
     isasyncgenfunction,
 )
-
-import aiohappybase
 
 T = TypeVar('T')
 
@@ -45,7 +44,10 @@ def synchronize(cls: type = None, base: type = None) -> type:
         return partial(synchronize, base=base)
     if base is None:
         # Get the equivalent async class if none given
-        base = getattr(aiohappybase, cls.__name__)
+        base = getattr(
+            import_module(cls.__module__.replace('.sync', '')),
+            cls.__name__,
+        )
     # Define the global scope for creating functions to ensure any
     # look-ups find the right values.
     scope = {
@@ -55,6 +57,7 @@ def synchronize(cls: type = None, base: type = None) -> type:
         **import_module('aiohappybase.sync').__dict__,  # Scope of sync pkg
         **import_module(cls.__module__).__dict__,  # Scope of class module
         **cls.__dict__,  # Scope inside the class
+        cls.__name__: cls,
     }
     # Copy all undefined attributes
     for name, value in base.__dict__.items():
@@ -87,6 +90,11 @@ def _synchronize_func(func: Callable[..., Union[T, Awaitable[T]]],
         code = _convert_async_names(code)
         # Remove async/await everywhere
         code = _remove_async(code)
+    # Find instances of super() and replace with super(ClassName, self)
+    if 'super()' in code:
+        class_name = func.__qualname__.split('.')[0]
+        self_name = next(iter(signature(func).parameters))
+        code = code.replace('super()', f'super({class_name}, {self_name})')
     # Compile code at the same line number as the async code to allow debugging
     code = compile('\n' * (lnum - 1) + code, getsourcefile(func), 'exec')
     # Execute the code which will add the function to the local dict
