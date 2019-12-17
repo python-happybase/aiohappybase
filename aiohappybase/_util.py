@@ -4,6 +4,7 @@ HappyBase utility module.
 These functions are not part of the public API.
 """
 import re
+from functools import lru_cache
 from typing import (
     Dict,
     List,
@@ -29,14 +30,15 @@ VTO = TypeVar('VTO')
 CAPITALS = re.compile('([A-Z])')
 
 
-def camel_case_to_pep8(name: str) -> str:
-    """Convert a camel cased name to PEP8 style."""
-    converted = CAPITALS.sub(lambda m: '_' + m.groups()[0].lower(), name)
-    return converted[1:] if converted[0] == '_' else converted
+@lru_cache(maxsize=None)
+def camel_to_snake_case(name: str) -> str:
+    """Convert a CamelCased name to PEP8 style snake_case."""
+    return CAPITALS.sub(r'_\1', name).lower().lstrip('_')
 
 
-def pep8_to_camel_case(name: str, initial: bool = False) -> str:
-    """Convert a PEP8 style name to camel case."""
+@lru_cache(maxsize=None)
+def snake_to_camel_case(name: str, initial: bool = False) -> str:
+    """Convert a PEP8 style snake_case name to CamelCase."""
     chunks = name.split('_')
     converted = [s.capitalize() for s in chunks]
     if initial:
@@ -53,7 +55,7 @@ def thrift_attrs(obj_or_cls) -> List[str]:
 def thrift_type_to_dict(obj: Any) -> Dict[str, Any]:
     """Convert a Thrift data type to a regular dictionary."""
     return {
-        camel_case_to_pep8(attr): getattr(obj, attr)
+        camel_to_snake_case(attr): getattr(obj, attr)
         for attr in thrift_attrs(obj)
     }
 

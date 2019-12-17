@@ -14,7 +14,7 @@ from thriftpy2.contrib.aio.rpc import make_client
 from Hbase_thrift import Hbase, ColumnDescriptor
 
 from .table import Table
-from ._util import ensure_bytes, pep8_to_camel_case, check_invalid_items
+from ._util import ensure_bytes, snake_to_camel_case, check_invalid_items
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +298,7 @@ class Connection:
         column_descriptors = []
         for cf_name, options in families.items():
             kwargs = {
-                pep8_to_camel_case(option_name): value
+                snake_to_camel_case(option_name): value
                 for option_name, value in (options or {}).items()
             }
 

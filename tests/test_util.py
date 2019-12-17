@@ -12,7 +12,7 @@ from aiohappybase.pool import asynccontextmanager
 
 
 class TestUtil(ut.TestCase):
-    def test_camel_case_to_pep8(self):
+    def test_camel_to_snake_case(self):
         examples = [
             ('foo', 'Foo', 'foo'),
             ('fooBar', 'FooBar', 'foo_bar'),
@@ -21,13 +21,13 @@ class TestUtil(ut.TestCase):
         ]
 
         for lower_cc, upper_cc, correct in examples:
-            x1 = util.camel_case_to_pep8(lower_cc)
-            x2 = util.camel_case_to_pep8(upper_cc)
+            x1 = util.camel_to_snake_case(lower_cc)
+            x2 = util.camel_to_snake_case(upper_cc)
             self.assertEqual(correct, x1)
             self.assertEqual(correct, x2)
 
-            y1 = util.pep8_to_camel_case(x1, True)
-            y2 = util.pep8_to_camel_case(x2, False)
+            y1 = util.snake_to_camel_case(x1, True)
+            y2 = util.snake_to_camel_case(x2, False)
             self.assertEqual(upper_cc, y1)
             self.assertEqual(lower_cc, y2)
 
