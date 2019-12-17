@@ -16,14 +16,14 @@ from typing import (
     AsyncGenerator as AsyncGen,
 )
 
-from Hbase_thrift import TScan
+from Hbase_thrift import TScan, TAppend
 
 from ._util import (
     thrift_type_to_dict,
     bytes_increment,
     map_dict,
     make_row,
-    make_row_ts,
+    iter_cells,
 )
 from .batch import Batch
 
@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 Data = Dict[bytes, bytes]
 Row = Union[Dict[bytes, bytes], Dict[bytes, Tuple[bytes, int]]]
+ValuesWithTs = Union[List[bytes], List[Tuple[bytes, int]]]
 
 pack_i64 = Struct('>q').pack
 
@@ -133,8 +134,7 @@ class Table:
         if not rows:
             return {}
 
-        _make_row = (make_row_ts if include_timestamp else make_row)
-        return _make_row(rows[0])
+        return make_row(rows[0], include_timestamp)
 
     async def rows(self,
                    rows: List[bytes],
@@ -181,15 +181,14 @@ class Table:
             results = await self.client.getRowsWithColumnsTs(
                 self.name, rows, columns, timestamp, {})
 
-        _make_row = (make_row_ts if include_timestamp else make_row)
-        return [(r.row, _make_row(r)) for r in results]
+        return [(r.row, make_row(r, include_timestamp)) for r in results]
 
     async def cells(self,
                     row: bytes,
                     column: bytes,
                     versions: int = None,
                     timestamp: int = None,
-                    include_timestamp: bool = False) -> List[Tuple[bytes, int]]:
+                    include_timestamp: bool = False) -> ValuesWithTs:
         """
         Retrieve multiple versions of a single cell from the table.
 
@@ -226,10 +225,7 @@ class Table:
             cells = await self.client.getVerTs(
                 self.name, row, column, timestamp, versions, {})
 
-        return [
-            (c.value, c.timestamp) if include_timestamp else c.value
-            for c in cells
-        ]
+        return list(iter_cells(cells, include_timestamp))
 
     async def scan(self,
                    row_start: bytes = None,
@@ -363,8 +359,6 @@ class Table:
         if row_start is None:
             row_start = b''
 
-        _make_row = (make_row_ts if include_timestamp else make_row)
-
         if self.connection.compat == '0.90':
             # The scannerOpenWithScan() Thrift function is not
             # available, so work around it as much as possible with the
@@ -437,7 +431,7 @@ class Table:
                 n_fetched += len(items)
 
                 for n_returned, item in enumerate(items, n_returned + 1):
-                    yield item.row, _make_row(item)
+                    yield item.row, make_row(item, include_timestamp)
 
                     if limit is not None and n_returned == limit:
                         return  # scan has finished
@@ -477,6 +471,30 @@ class Table:
         """
         async with self.batch(timestamp=timestamp, wal=wal) as batch:
             await batch.put(row, data)
+
+    async def append(self,
+                     row: bytes,
+                     data: Dict[bytes, bytes],
+                     include_timestamp: bool = False) -> Row:
+        """
+        Append data to an existing row.
+
+        The `data` argument behaves just like it does in :py:meth:`put`
+        except that instead of replacing the current values, they are
+        appended to the end. If a specified cell doesn't exist, then the
+        result is the same as calling :py:meth:`put` for that cell.
+
+        :param row: the row key
+        :param data: data to append
+        :param include_timestamp: include timestamps with the values?
+        :return: Updated cell values like the output of :py:meth:`row`
+        """
+        if self.connection.compat < '0.98':
+            raise NotImplementedError("'append' requires HBase >= 0.98")
+
+        cols, vals = map(list, zip(*data.items()))
+        cells = await self.client.append(TAppend(self.name, row, cols, vals))
+        return dict(zip(cols, iter_cells(cells, include_timestamp)))
 
     async def delete(self,
                      row: bytes,

@@ -584,6 +584,36 @@ class TestAPI(asynctest.TestCase):
 
         self.assertTrue(got_results, msg="No results found for cf1:col1='v1'")
 
+    async def test_append(self):
+        row_key = b'row-test-append'
+        c1 = b'cf1:col1'
+        c2 = b'cf1:col2'
+        s1 = b'abc'
+        s2 = b'123'
+
+        append = partial(self.table.append, row_key)
+        get = partial(self.table.row, row_key)
+
+        if self.connection.compat < '0.98':
+            with self.assertRaises(NotImplementedError):
+                await append({})
+            return
+
+        data = {c1: s1, c2: s2}
+        self.assertDictEqual(data, await append(data))
+        self.assertDictEqual(data, await get())
+
+        expected = {c1: s1 + s2, c2: s2 + s1}
+        self.assertDictEqual(expected, await append({c1: s2, c2: s1}))
+        self.assertDictEqual(expected, await get())
+
+        for value in (await append(data, include_timestamp=True)).values():
+            self.assertIsInstance(value, tuple)
+            self.assertEqual(len(value), 2)
+            value, ts = value
+            self.assertIsInstance(value, bytes)
+            self.assertIsInstance(ts, int)
+
     async def test_delete(self):
         row_key = b'row-test-delete'
         data = {b'cf1:col1': b'v1',

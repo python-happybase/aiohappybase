@@ -15,6 +15,8 @@ from typing import (
     TypeVar,
     Callable,
     Iterable,
+    Iterator,
+    Union,
 )
 
 from Hbase_thrift import TRowResult, TCell
@@ -109,27 +111,21 @@ def map_dict(data: Dict[KTI, VTI],
     return {keys(k): values(v) for k, v in data.items()}
 
 
-def make_row(row: TRowResult) -> Dict[bytes, bytes]:
+def make_row(row: TRowResult,
+             include_ts: bool = False) -> Union[Dict[bytes, bytes],
+                                                Dict[bytes, Tuple[bytes, int]]]:
     """
     Make a row dict for a given row result.
 
     :param row: Row result from thrift client to convert a row dictionary
+    :param include_ts: Include timestamp with the values?
     :return: Dictionary mapping columns to values for the row.
     """
-    return {name: cell.value for name, cell in _get_cell_map(row).items()}
-
-
-def make_row_ts(row: TRowResult) -> Dict[bytes, Tuple[bytes, int]]:
-    """
-    Make a row dict for a given row result including timestamps.
-
-    :param row: Row result from thrift client to convert a row dictionary
-    :return: Dictionary mapping columns to tuples of (value, timestamp)
-    """
-    return {
-        name: (cell.value, cell.timestamp)
-        for name, cell in _get_cell_map(row).items()
-    }
+    cell_map = _get_cell_map(row).items()
+    if include_ts:
+        return {name: (cell.value, cell.timestamp) for name, cell in cell_map}
+    else:
+        return {name: cell.value for name, cell in cell_map}
 
 
 def _get_cell_map(row: TRowResult) -> Dict[bytes, TCell]:
@@ -140,6 +136,22 @@ def _get_cell_map(row: TRowResult) -> Dict[bytes, TCell]:
         return row.columns
     else:  # pragma: no cover
         raise RuntimeError("Neither columns nor sortedColumns is available!")
+
+
+def iter_cells(cells: List[TCell],
+               include_ts: bool = False) -> Union[Iterator[bytes],
+                                                  Iterator[Tuple[bytes, int]]]:
+    """
+    Get the values of a list of cells.
+
+    :param cells: List of TCells to process
+    :param include_ts: Include timestamp with the values?
+    :return: Iterator of cell values or tuple of values and timestamps
+    """
+    if include_ts:
+        return ((c.value, c.timestamp) for c in cells)
+    else:
+        return (c.value for c in cells)
 
 
 def check_invalid_items(**kwargs: Tuple[T, Iterable[T]]):
