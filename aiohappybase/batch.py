@@ -4,10 +4,10 @@ AIOHappyBase Batch module.
 
 import logging
 import abc
-from typing import TYPE_CHECKING, Dict, List, Iterable, Type
 from functools import partial
 from collections import defaultdict
 from numbers import Integral
+from typing import TYPE_CHECKING, Dict, Iterable, Type, Tuple, Optional as Opt
 
 from Hbase_thrift import BatchMutation, Mutation, TIncrement
 
@@ -56,7 +56,6 @@ class MutationBatcher(Batcher):
     Batcher implementation for handling column mutations via the
    `mutateRows` and `mutateRowsTs` HBase Thrift endpoints.
     """
-
     def __init__(self,
                  table: 'Table',
                  timestamp: int = None,
@@ -111,13 +110,7 @@ class MutationBatcher(Batcher):
         used; its only use is to override the batch-wide value passed to
         :py:meth:`Table.batch`.
         """
-        if wal is None:
-            wal = self._wal
-
-        await self._add_mutations(row, [
-            Mutation(isDelete=False, column=column, value=value, writeToWAL=wal)
-            for column, value in data.items()
-        ])
+        await self._add_mutations(row, wal, data.items())  # noqa
 
     async def delete(self,
                      row: bytes,
@@ -140,17 +133,21 @@ class MutationBatcher(Batcher):
                 self._families = await self._table.column_family_names()
             columns = self._families
 
-        if wal is None:
-            wal = self._wal
+        await self._add_mutations(row, wal, ((c, None) for c in columns))
 
-        await self._add_mutations(row, [
-            Mutation(isDelete=True, column=column, writeToWAL=wal)
-            for column in columns
-        ])
-
-    async def _add_mutations(self, row: bytes, mutations: List[Mutation]):
-        self._mutations[row].extend(mutations)
-        self._mutation_count += len(mutations)
+    async def _add_mutations(self,
+                             row: bytes,
+                             wal: bool,
+                             mutations: Iterable[Tuple[bytes, Opt[bytes]]]):
+        wal = wal if wal is not None else self._wal
+        self._mutations[row].extend(
+            Mutation(
+                isDelete=value is None,
+                column=column,
+                value=value,
+                writeToWAL=wal,
+            ) for column, value in mutations
+        )
         await self._check_send()
 
 
