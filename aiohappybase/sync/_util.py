@@ -21,7 +21,7 @@ def _make_sub(pat: str, repl: str = '', flags: int = 0) -> Callable[[str], str]:
     return partial(re.compile(pat, flags=flags).sub, repl)  # noqa
 
 
-_remove_async = _make_sub(r'(?<!\w)(async|await)\s?')
+_remove_async = _make_sub(r'(?<!\w)(async |await |async(?=contextmanager))')
 _convert_async_names = _make_sub(
     # Match __aenter__, __aexit__, __anext__, aclose, StopAsyncIteration
     r'(?:(__)a(enter|exit|next)(__))|a(close)|(Stop)Async(Iteration)',
