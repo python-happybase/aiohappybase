@@ -295,7 +295,15 @@ class TestAPI(asynctest.TestCase):
                 await b.delete(f'row-batch2-{i:03}'.encode('ascii'))
         self.assertEqual(0, await self._scan_len(row_prefix=b'row-batch2-'))
 
-    @asynctest.expectedFailure
+    async def test_batch_order(self):
+        row = b'row-test-batch-order'
+        col = b'cf1:col'
+
+        async with self.table.batch() as b:
+            for i in range(5):
+                await b.put(row, {col: str(i).encode()})
+        self.assertEqual((await self.table.row(row))[col], b'4')
+
     async def test_batch_delete_put_same_row(self):
         # See https://github.com/python-happybase/happybase/issues/224
         row = b'row-test-batch-delete-put'

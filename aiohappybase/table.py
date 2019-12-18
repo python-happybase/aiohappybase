@@ -552,12 +552,6 @@ class Table:
         using the `wal` argument to :py:meth:`Batch.put` and
         :py:meth:`Batch.delete`.
 
-        .. warning::
-            When both deleting and putting using batch, most operations are
-            done in order but column family deletes seem to be done last.
-            This means you can't delete a whole row and put to it in the same
-            batch without forcing :py:meth:`Batch.send` in between.
-
         .. versionadded:: 0.7
            `wal` argument
 

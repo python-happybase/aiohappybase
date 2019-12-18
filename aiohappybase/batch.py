@@ -2,8 +2,8 @@
 AIOHappyBase Batch module.
 """
 
-import logging
 import abc
+import logging
 from functools import partial
 from collections import defaultdict
 from numbers import Integral
@@ -51,11 +51,39 @@ class Batcher(abc.ABC):
             await self.send()
 
 
+class MutationProxy:
+    """
+    Class to store mutations during batching before they are finalized. To
+    signify a delete mutation, :py:attr:`value` should be set to ``None``.
+    """
+    __slots__ = 'col', 'value', 'wal'
+
+    def __init__(self, col: bytes, value: Opt[bytes], wal: bool):
+        self.col = col
+        self.value = value
+        self.wal = wal
+
+    def update(self, value: Opt[bytes], wal: bool = True):
+        """Change the value and wal."""
+        self.value = value
+        self.wal = wal
+
+    def resolve(self) -> Mutation:
+        """Create the Mutation object to send to the server."""
+        return Mutation(self.is_delete, self.col, self.value, self.wal)
+
+    @property
+    def is_delete(self) -> bool:
+        return self.value is None
+
+
 class MutationBatcher(Batcher):
     """
     Batcher implementation for handling column mutations via the
    `mutateRows` and `mutateRowsTs` HBase Thrift endpoints.
     """
+    _mutations: Dict[bytes, Dict[bytes, MutationProxy]]
+
     def __init__(self,
                  table: 'Table',
                  timestamp: int = None,
@@ -78,7 +106,7 @@ class MutationBatcher(Batcher):
         self._mutate_rows = partial(mut_rows, self._table.name, attributes={})
 
     def _reset(self):
-        self._mutations = defaultdict(list)
+        self._mutations = defaultdict(dict)
         self._mutation_count = 0
 
     @property
@@ -86,17 +114,60 @@ class MutationBatcher(Batcher):
         return self._mutation_count
 
     async def send(self) -> None:
-        bms = [BatchMutation(row, m) for row, m in self._mutations.items()]
-        if not bms:
+        await self._handle_delete_collisions()
+
+        # Send the rest of the non-colliding mutations
+        batch_mutations = [
+            BatchMutation(row, [m.resolve() for m in col_muts.values()])
+            for row, col_muts in self._mutations.items()
+        ]
+        if not batch_mutations:
             return
 
         logger.debug(
             f"Sending batch for '{self._table.name}' ({self._mutation_count} "
-            f"mutations on {len(bms)} rows)"
+            f"mutations on {len(batch_mutations)} rows)"
         )
 
-        await self._mutate_rows(bms)
+        await self._mutate_rows(batch_mutations)
         self._reset()
+
+    async def _handle_delete_collisions(self):
+        """
+        Fix for: https://github.com/python-happybase/happybase/issues/224
+
+        Deletes are run after puts in the HBase thrift handler. If the
+        user deletes a row/cf and then tries to put to it, the delete will
+        overwrite the put. Work around this bug by detecting collisions
+        and sending the deletes first, if any.
+
+        `Offending code as of writing <https://github.com/apache/hbase/blob
+        /b99f58304e9c83f3307acd24feaca90eb629120f/hbase-thrift/src/main/java
+        /org/apache/hadoop/hbase/thrift/ThriftHBaseServiceHandler.java#L789>`__
+        """
+        if self._mutation_count == 1:
+            return  # Skip this for single puts/deletes
+
+        colliding_deletes = []
+
+        for row, col_muts in self._mutations.items():
+            cf_deletes = set()  # Column families that are deleted
+            cf_puts = set()  # Column families that are put to
+            for col, mut in col_muts.items():
+                fam, _, qf = col.partition(b':')  # Get family and qualifier
+                if qf and not mut.is_delete:  # Put to a column
+                    cf_puts.add(fam)
+                elif not qf and mut.is_delete:  # Delete a whole column family
+                    cf_deletes.add(fam)
+
+            # Get the Mutations that delete a family which needs to be put to
+            deletes = [col_muts.pop(c).resolve() for c in cf_deletes & cf_puts]
+            if deletes:
+                colliding_deletes.append(BatchMutation(row, deletes))
+
+        if colliding_deletes:
+            logger.debug("Found delete/put collisions. Sending deletes first.")
+            await self._mutate_rows(colliding_deletes)
 
     async def put(self,
                   row: bytes,
@@ -140,14 +211,13 @@ class MutationBatcher(Batcher):
                              wal: bool,
                              mutations: Iterable[Tuple[bytes, Opt[bytes]]]):
         wal = wal if wal is not None else self._wal
-        self._mutations[row].extend(
-            Mutation(
-                isDelete=value is None,
-                column=column,
-                value=value,
-                writeToWAL=wal,
-            ) for column, value in mutations
-        )
+        row_mut = self._mutations[row]
+        for col, val in mutations:
+            try:
+                row_mut[col].update(val, wal)
+            except KeyError:
+                row_mut[col] = MutationProxy(col, val, wal)
+                self._mutation_count += 1
         await self._check_send()
 
 
