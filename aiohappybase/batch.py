@@ -224,7 +224,7 @@ class MutationBatcher(Batcher):
 class CounterBatcher(Batcher):
     """
     Batcher implementation for handling counter manipulations via the
-   `incrementRows` HBase Thrift endpoint.
+    `incrementRows` HBase Thrift endpoint.
     """
 
     def _reset(self):

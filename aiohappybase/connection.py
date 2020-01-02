@@ -7,9 +7,14 @@ import logging
 import asyncio as aio
 from typing import AnyStr, List, Dict, Any
 
-from thriftpy2.contrib.aio.protocol.binary import TAsyncBinaryProtocolFactory
-from thriftpy2.contrib.aio.transport.buffered \
-    import TAsyncBufferedTransportFactory
+from thriftpy2.contrib.aio.transport import (
+    TAsyncBufferedTransportFactory,
+    TAsyncFramedTransportFactory,
+)
+from thriftpy2.contrib.aio.protocol import (
+    TAsyncBinaryProtocolFactory,
+    TAsyncCompactProtocolFactory,
+)
 from thriftpy2.contrib.aio.rpc import make_client
 
 from Hbase_thrift import Hbase, ColumnDescriptor
@@ -73,7 +78,7 @@ class Connection:
     program hangs when making a connection. ``TCompactProtocol`` is
     a more compact binary format that is  typically more efficient to
     process as well. ``TBinaryProtocol`` is the default protocol that
-    Happybase uses.
+    AIOHappyBase uses.
 
     .. versionadded:: 0.9
        `protocol` argument
@@ -100,9 +105,11 @@ class Connection:
     # TODO: Auto generate these?
     THRIFT_TRANSPORTS = dict(
         buffered=TAsyncBufferedTransportFactory(),
+        framed=TAsyncFramedTransportFactory(),
     )
     THRIFT_PROTOCOLS = dict(
         binary=TAsyncBinaryProtocolFactory(decode_response=False),
+        compact=TAsyncCompactProtocolFactory(decode_response=False),
     )
     THRIFT_CLIENT_FACTORY = staticmethod(make_client)
 
