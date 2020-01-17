@@ -20,8 +20,55 @@ The library can be accessed one of two ways:
     (packages always seem to be loaded before modules when they have the same
     name) but it isn't advised to have both installed.
 
-    To ensure you always get sync the version of AIOHappyBase, it is best to
+    To ensure you always get the sync version of AIOHappyBase, it is best to
     use ``import aiohappybase.sync as happybase`` if you wish to use the
-    ``happybase`` name. The module is really only to smooth the transition.
+    ``happybase`` name. The ``happybase.py`` module is really only to smooth
+    the transition.
 
+
+In the sync version, all async methods have been converted to synchronous
+equivalents. Here are some examples from the user guide, which are basically
+just removals of the async/await keywords::
+
+    from aiohappybase.sync import Connection
+
+    with Connection('somehost') as connection:
+        table = connection.create_table('mytable', {
+            'cf1': dict(max_versions=10),
+            'cf2': dict(max_versions=1, block_cache_enabled=False),
+            'cf3': dict(),  # use defaults
+        })
+
+        table.put(b'row-key-1', {b'cf:col1': b'value1', b'cf:col2': b'value2'})
+        table.put(b'row-key-2', {b'cf:col1': b'value1', b'cf:col2': b'value2'})
+
+        rows = table.rows([b'row-key-1', b'row-key-2'])
+        for key, data in rows:
+            print(key, data)
+
+
+Connection
+==========
+
+.. autoclass:: aiohappybase.sync.Connection
+
+
+Table
+=====
+
+.. autoclass:: aiohappybase.sync.Table
+
+
+Batch
+=====
+
+.. autoclass:: aiohappybase.sync.Batch
+
+
+Connection pool
+===============
+
+.. autoclass:: aiohappybase.sync.ConnectionPool
+
+.. autoclass:: aiohappybase.sync.NoConnectionsAvailable
 

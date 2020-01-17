@@ -131,7 +131,7 @@ and will also remove the prefix transparently when returning results, e.g.::
 This also applies to other methods that take table names, such as
 :py:meth:`Connection.table`::
 
-   table = connection.table('XYZ')  # Operates on myproject_XYZ in HBase
+    table = connection.table('XYZ')  # Operates on myproject_XYZ in HBase
 
 The end result is that the table prefix is specified only once in your code,
 namely in the call to the :py:class:`Connection` constructor, and that only a
@@ -157,15 +157,15 @@ table in HBase. The most basic one is :py:meth:`Table.row`, which retrieves a
 single row from the table, and returns it as a dictionary mapping columns to
 values::
 
-   row = await table.row(b'row-key')
-   print(row[b'cf1:col1'])   # prints the value of cf1:col1
+    row = await table.row(b'row-key')
+    print(row[b'cf1:col1'])   # prints the value of cf1:col1
 
 The :py:meth:`Table.rows` method works just like :py:meth:`Table.row`, but
 takes multiple row keys and returns those as `(key, data)` tuples::
 
-   rows = await table.rows([b'row-key-1', b'row-key-2'])
-   for key, data in rows:
-       print(key, data)
+    rows = await table.rows([b'row-key-1', b'row-key-2'])
+    for key, data in rows:
+        print(key, data)
 
 If you want the results that :py:meth:`Table.rows` returns as a dictionary,
 you will have to do this yourself. This is really easy though, since the return
