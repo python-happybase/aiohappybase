@@ -36,8 +36,8 @@ jobs:
         python-version: '3.7'
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install setuptools wheel autopep8
+        python -m pip install -U pip
+        python -m pip install -U setuptools wheel autopep8
     - name: Generate Sync Stub Files
       run: python make_sync_stubs.py
     - name: Build
