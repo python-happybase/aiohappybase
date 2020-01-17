@@ -310,6 +310,12 @@ class Batch:
         self.counter_inc = self._counters.counter_inc
         self.counter_dec = self._counters.counter_dec
 
+    # Show documentation for mutation methods
+    put = MutationBatcher.put
+    delete = MutationBatcher.delete
+    counter_inc = CounterBatcher.counter_inc
+    counter_dec = CounterBatcher.counter_dec
+
     async def send(self) -> None:
         """Send the batch to the server."""
         await self._mutations.send()
