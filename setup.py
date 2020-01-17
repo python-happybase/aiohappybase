@@ -27,7 +27,7 @@ setup(
     long_description=get_file_contents('README.rst'),
     author="Roger Aiudi",
     author_email="aiudirog@gmail.com",
-    url='https://github.com/aiudirog/aiohappybase',
+    url='https://github.com/python-happybase/aiohappybase',
     install_requires=get_install_requires(),
     packages=find_packages(exclude=['tests']),
     include_package_data=True,

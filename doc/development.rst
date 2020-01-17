@@ -9,11 +9,11 @@ Getting the source
 
 The AIOHappyBase source code repository is hosted on GitHub:
 
-   https://github.com/aiudirog/aiohappybase
+   https://github.com/python-happybase/aiohappybase
 
 To grab a copy, use this::
 
-   $ git clone https://github.com/aiudirog/aiohappybase.git
+   $ git clone https://github.com/python-happybase/aiohappybase.git
 
 
 
@@ -49,7 +49,7 @@ To test the HBase 0.90 compatibility mode, use this::
 
    (venv) $ export AIOHAPPYBASE_COMPAT=0.90
 
-To test the framed Thrift transport mode (once it is supported), use this::
+To test the framed Thrift transport mode, use this::
 
    (venv) $ export AIOHAPPYBASE_TRANSPORT=framed
 
