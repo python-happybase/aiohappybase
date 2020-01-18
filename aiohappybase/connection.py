@@ -91,16 +91,6 @@ class Connection:
 
     .. versionadded:: 0.4
        support for framed Thrift transports
-
-    :param host: The host to connect to
-    :param port: The port to connect to
-    :param timeout: The socket timeout in milliseconds (optional)
-    :param autoconnect: Whether the connection should be opened directly
-    :param table_prefix: Prefix used to construct table names (optional)
-    :param table_prefix_separator: Separator used for `table_prefix`
-    :param compat: Compatibility mode (optional)
-    :param transport: Thrift transport mode (optional)
-    :param protocol: Thrift protocol mode (optional)
     """
     # TODO: Auto generate these?
     THRIFT_TRANSPORTS = dict(
@@ -123,7 +113,17 @@ class Connection:
                  compat: str = DEFAULT_COMPAT,
                  transport: str = DEFAULT_TRANSPORT,
                  protocol: str = DEFAULT_PROTOCOL):
-
+        """
+        :param host: The host to connect to
+        :param port: The port to connect to
+        :param timeout: The socket timeout in milliseconds (optional)
+        :param autoconnect: Whether the connection should be opened directly
+        :param table_prefix: Prefix used to construct table names (optional)
+        :param table_prefix_separator: Separator used for `table_prefix`
+        :param compat: Compatibility mode (optional)
+        :param transport: Thrift transport mode (optional)
+        :param protocol: Thrift protocol mode (optional)
+        """
         if table_prefix is not None:
             if not isinstance(table_prefix, (str, bytes)):
                 raise TypeError("'table_prefix' must be a string")

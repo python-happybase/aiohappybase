@@ -70,6 +70,8 @@ def synchronize(cls: type = None, base: type = None) -> type:
             # Get the new one while bypassing decorators
             name = _unwrap(value).__name__
         setattr(cls, name, value)
+    # Ensure doc-string is copied if necessary
+    cls.__doc__ = cls.__doc__ or base.__doc__
     return cls
 
 
