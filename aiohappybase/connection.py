@@ -7,6 +7,9 @@ import logging
 import asyncio as aio
 from typing import AnyStr, List, Dict, Any
 
+from pkg_resources import parse_version
+
+import thriftpy2
 from thriftpy2.contrib.aio.transport import (
     TAsyncBufferedTransportFactory,
     TAsyncFramedTransportFactory,
@@ -32,6 +35,13 @@ DEFAULT_COMPAT = os.environ.get('AIOHAPPYBASE_COMPAT', '0.98')
 DEFAULT_TRANSPORT = os.environ.get('AIOHAPPYBASE_TRANSPORT', 'buffered')
 DEFAULT_PROTOCOL = os.environ.get('AIOHAPPYBASE_PROTOCOL', 'binary')
 
+if parse_version(thriftpy2.__version__) <= parse_version('0.4.10'):
+    _make_client = make_client
+
+    def make_client(*args, **kwargs):
+        kwargs['socket_timeout'] = kwargs.pop('timeout', 3000)
+        return _make_client(*args, **kwargs)
+
 
 class Connection:
     """
@@ -43,8 +53,12 @@ class Connection:
     specifed, the `timeout` argument specifies the socket timeout in
     milliseconds.
 
-    If `autoconnect` is `True` the connection is made directly, otherwise
-    :py:meth:`Connection.open` must be called explicitly before first use.
+    If `autoconnect` is `True` the connection is made directly during
+    initialization. Otherwise a context manager should be used (with
+    Connection...) or :py:meth:`Connection.open` must be called explicitly
+    before first use. Note that due to limitations in the Python async
+    framework, a RuntimeError will be raised if it is used inside of a running
+    asyncio event loop.
 
     The optional `table_prefix` and `table_prefix_separator` arguments
     specify a prefix and a separator string to be prepended to all table
@@ -112,7 +126,8 @@ class Connection:
                  table_prefix_separator: AnyStr = b'_',
                  compat: str = DEFAULT_COMPAT,
                  transport: str = DEFAULT_TRANSPORT,
-                 protocol: str = DEFAULT_PROTOCOL):
+                 protocol: str = DEFAULT_PROTOCOL,
+                 **client_kwargs: Any):
         """
         :param host: The host to connect to
         :param port: The port to connect to
@@ -123,6 +138,9 @@ class Connection:
         :param compat: Compatibility mode (optional)
         :param transport: Thrift transport mode (optional)
         :param protocol: Thrift protocol mode (optional)
+        :param client_kwargs:
+            Extra keyword arguments for `make_client()`. See the ThriftPy2
+            documentation for more information.
         """
         if table_prefix is not None:
             if not isinstance(table_prefix, (str, bytes)):
@@ -151,6 +169,15 @@ class Connection:
         self._transport_factory = self.THRIFT_TRANSPORTS[transport]
         self._protocol_factory = self.THRIFT_PROTOCOLS[protocol]
 
+        self.client_kwargs = {
+            'service': Hbase,
+            'host': self.host,
+            'port': self.port,
+            'timeout': self.timeout,
+            'trans_factory': self._transport_factory,
+            'proto_factory': self._protocol_factory,
+            **client_kwargs,
+        }
         self.client = None
 
         if autoconnect:
@@ -159,23 +186,9 @@ class Connection:
     def _autoconnect(self):
         loop = aio.get_event_loop()
         if loop.is_running():
-            raise RuntimeError(
-                "'autoconnect' cannot be used inside a running event loop!"
-            )
+            raise RuntimeError("Cannot autoconnect in a running event loop!")
         else:
             loop.run_until_complete(self.open())
-
-    async def _refresh_thrift_client(self) -> None:
-        """Refresh the Thrift socket, transport, and client."""
-        # TODO: Support all kwargs to make_client
-        self.client = await self.THRIFT_CLIENT_FACTORY(
-            service=Hbase,
-            host=self.host,
-            port=self.port,
-            socket_timeout=self.timeout,
-            trans_factory=self._transport_factory,
-            proto_factory=self._protocol_factory,
-        )
 
     def _table_name(self, name: AnyStr) -> bytes:
         """Construct a table name by optionally adding a table name prefix."""
@@ -193,7 +206,7 @@ class Connection:
             return  # _refresh_thrift_client opened the transport
 
         logger.debug(f"Opening Thrift transport to {self.host}:{self.port}")
-        await self._refresh_thrift_client()
+        self.client = await self.THRIFT_CLIENT_FACTORY(**self.client_kwargs)
 
     def close(self) -> None:
         """
