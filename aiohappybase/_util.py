@@ -4,6 +4,7 @@ HappyBase utility module.
 These functions are not part of the public API.
 """
 import re
+import asyncio
 from functools import lru_cache
 from typing import (
     Dict,
@@ -17,6 +18,7 @@ from typing import (
     Iterable,
     Iterator,
     Union,
+    Coroutine,
 )
 
 from Hbase_thrift import TRowResult, TCell
@@ -68,9 +70,7 @@ def ensure_bytes(value: AnyStr) -> bytes:
         return value
     if isinstance(value, str):
         return value.encode('utf-8')
-    raise TypeError(
-        f"input must be a text or byte string, got {type(value).__name__}"
-    )
+    raise TypeError(f"input must be str or bytes, got {type(value).__name__}")
 
 
 def bytes_increment(b: bytes) -> Optional[bytes]:
@@ -167,3 +167,20 @@ def check_invalid_items(**kwargs: Tuple[T, Iterable[T]]):
         possible = set(possible)
         if value not in possible:
             raise ValueError(f"{key}={value} is not in: {possible}")
+
+
+def run_coro(coro: Coroutine[None, None, T],
+             error: str = "Event Loop Running") -> T:
+    """
+    Run a coroutine in the current event loop using
+    :py:meth:`asyncio.BaseEventLoop.run_until_complete`.
+
+    :param coro: Coroutine to run
+    :param error: Error message to use if the event loop is running
+    :returns: Result of the coroutine
+    :raises RuntimeError: If the event loop is already running
+    """
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        raise RuntimeError(error)
+    return loop.run_until_complete(coro)

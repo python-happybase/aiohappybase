@@ -4,7 +4,6 @@ AIOHappyBase connection module.
 
 import os
 import logging
-import asyncio as aio
 from typing import AnyStr, List, Dict, Any
 
 from pkg_resources import parse_version
@@ -23,7 +22,12 @@ from thriftpy2.contrib.aio.rpc import make_client
 from Hbase_thrift import Hbase, ColumnDescriptor
 
 from .table import Table
-from ._util import ensure_bytes, snake_to_camel_case, check_invalid_items
+from ._util import (
+    ensure_bytes,
+    snake_to_camel_case,
+    check_invalid_items,
+    run_coro,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,11 +188,7 @@ class Connection:
             self._autoconnect()
 
     def _autoconnect(self):
-        loop = aio.get_event_loop()
-        if loop.is_running():
-            raise RuntimeError("Cannot autoconnect in a running event loop!")
-        else:
-            loop.run_until_complete(self.open())
+        run_coro(self.open(), "Cannot autoconnect in a running event loop!")
 
     def _table_name(self, name: AnyStr) -> bytes:
         """Construct a table name by optionally adding a table name prefix."""
@@ -357,8 +357,7 @@ class Connection:
 
         :param name: The table name
         """
-        name = self._table_name(name)
-        await self.client.enableTable(name)
+        await self.client.enableTable(self._table_name(name))
 
     async def disable_table(self, name: AnyStr) -> None:
         """
@@ -366,8 +365,7 @@ class Connection:
 
         :param name: The table name
         """
-        name = self._table_name(name)
-        await self.client.disableTable(name)
+        await self.client.disableTable(self._table_name(name))
 
     async def is_table_enabled(self, name: AnyStr) -> None:
         """
@@ -378,8 +376,7 @@ class Connection:
         :return: whether the table is enabled
         :rtype: bool
         """
-        name = self._table_name(name)
-        return await self.client.isTableEnabled(name)
+        return await self.client.isTableEnabled(self._table_name(name))
 
     async def compact_table(self, name: AnyStr, major: bool = False) -> None:
         """Compact the specified table.
@@ -403,10 +400,7 @@ class Connection:
 
     # Support context usage
     def __enter__(self) -> 'Connection':
-        loop = aio.get_event_loop()
-        if loop.is_running():
-            raise RuntimeError("Use async with inside a running event loop!")
-        loop.run_until_complete(self.open())
+        run_coro(self.open(), error="Use 'async with' in a running event loop!")
         return self
 
     def __exit__(self, *_exc) -> None:
