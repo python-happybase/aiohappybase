@@ -9,9 +9,9 @@ AIOHappyBase
    :target: https://en.wikipedia.org/wiki/MIT_License
    :alt: Licence - MIT
 
-.. image:: https://github.com/python-happybase/aiohappybase/workflows/Run%20Tests/badge.svg
+.. image:: https://github.com/python-happybase/aiohappybase/workflows/tests/badge.svg
    :target: https://github.com/python-happybase/aiohappybase
-   :alt: Workflow Status
+   :alt: Tests Status
 
 .. image:: https://readthedocs.org/projects/aiohappybase/badge/?version=latest
    :target: https://aiohappybase.readthedocs.io/en/latest/?badge=latest
@@ -19,6 +19,7 @@ AIOHappyBase
 
 .. image:: https://codecov.io/gh/python-happybase/aiohappybase/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/python-happybase/aiohappybase
+   :alt: Coverage Status
 
 **AIOHappyBase** is a developer-friendly Python_ library to interact asynchronously with Apache
 HBase_. It is a fork of the original `HappyBase <https://github.com/wbolster/happybase>`_ library aiming to deliver a very similar API.

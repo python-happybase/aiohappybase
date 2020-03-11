@@ -280,6 +280,7 @@ class Batch:
     This class cannot be instantiated directly;
     use :py:meth:`Table.batch` instead.
     """
+
     def __init__(self,
                  table: 'Table',
                  timestamp: int = None,
