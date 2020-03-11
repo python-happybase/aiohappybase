@@ -1,6 +1,14 @@
 AIOHappyBase
 ============
 
+.. image:: https://img.shields.io/pypi/v/aiohappybase.svg
+   :target: https://pypi.python.org/pypi/aiohappybase
+   :alt: PyPI
+
+.. image:: https://img.shields.io/badge/license-MIT-red.svg
+   :target: https://en.wikipedia.org/wiki/MIT_License
+   :alt: Licence - MIT
+
 .. image:: https://github.com/python-happybase/aiohappybase/workflows/Run%20Tests/badge.svg
    :target: https://github.com/python-happybase/aiohappybase
    :alt: Workflow Status
