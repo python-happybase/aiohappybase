@@ -1,14 +1,8 @@
-from pathlib import Path
+import versioneer
 from setuptools import setup
 
-__version__ = None
-exec(Path('aiohappybase/_version.py').read_text())
-
 setup(
-    version=__version__,
-    install_requires=[
-        line for line in
-        map(str.strip, Path('requirements.txt').read_text().splitlines())
-        if line
-    ],
+    version=versioneer.get_version(),
+    install_requires=[*filter(None, map(str.strip, open('requirements.txt')))],
+    cmdclass=versioneer.get_cmdclass(),
 )

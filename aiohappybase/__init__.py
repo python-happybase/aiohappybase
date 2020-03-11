@@ -13,11 +13,13 @@ __all__ = [
     'NoConnectionsAvailable',
 ]
 
-from ._version import __version__  # noqa
-
 from . import _load_hbase_thrift  # noqa
 
 from .connection import DEFAULT_HOST, DEFAULT_PORT, Connection
 from .table import Table
 from .batch import Batch
 from .pool import ConnectionPool, NoConnectionsAvailable
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
