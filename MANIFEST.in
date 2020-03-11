@@ -6,3 +6,4 @@ include *.rst
 include doc/conf.py doc/*.rst
 include versioneer.py
 include aiohappybase/_version.py
+recursive-include tests *.py
