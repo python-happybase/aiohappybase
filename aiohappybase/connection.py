@@ -6,9 +6,6 @@ import os
 import logging
 from typing import AnyStr, List, Dict, Any
 
-from pkg_resources import parse_version
-
-import thriftpy2
 from thriftpy2.contrib.aio.transport import (
     TAsyncBufferedTransportFactory,
     TAsyncFramedTransportFactory,
@@ -38,13 +35,6 @@ DEFAULT_PORT = int(os.environ.get('AIOHAPPYBASE_PORT', '9090'))
 DEFAULT_COMPAT = os.environ.get('AIOHAPPYBASE_COMPAT', '0.98')
 DEFAULT_TRANSPORT = os.environ.get('AIOHAPPYBASE_TRANSPORT', 'buffered')
 DEFAULT_PROTOCOL = os.environ.get('AIOHAPPYBASE_PROTOCOL', 'binary')
-
-if parse_version(thriftpy2.__version__) <= parse_version('0.4.10'):
-    _make_client = make_client
-
-    def make_client(*args, **kwargs):
-        kwargs['socket_timeout'] = kwargs.pop('timeout', 3000)
-        return _make_client(*args, **kwargs)
 
 
 class Connection:
