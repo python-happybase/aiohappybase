@@ -2,7 +2,8 @@
 HappyBase utility tests.
 """
 
-import unittest as ut
+import pytest
+
 from inspect import iscoroutinefunction
 from codecs import decode, encode
 
@@ -11,7 +12,7 @@ from aiohappybase.sync import _util as sync_util  # noqa
 from aiohappybase.pool import asynccontextmanager
 
 
-class TestUtil(ut.TestCase):
+class TestUtil:
     def test_camel_to_snake_case(self):
         examples = [
             ('foo', 'Foo', 'foo'),
@@ -23,13 +24,13 @@ class TestUtil(ut.TestCase):
         for lower_cc, upper_cc, correct in examples:
             x1 = util.camel_to_snake_case(lower_cc)
             x2 = util.camel_to_snake_case(upper_cc)
-            self.assertEqual(correct, x1)
-            self.assertEqual(correct, x2)
+            assert correct == x1
+            assert correct == x2
 
             y1 = util.snake_to_camel_case(x1, True)
             y2 = util.snake_to_camel_case(x2, False)
-            self.assertEqual(upper_cc, y1)
-            self.assertEqual(lower_cc, y2)
+            assert upper_cc == y1
+            assert lower_cc == y2
 
     def test_bytes_increment(self):
         test_values = [
@@ -43,35 +44,34 @@ class TestUtil(ut.TestCase):
             (b'4242ffff', b'4243'),
         ]
 
-        self.assertIsNone(util.bytes_increment(b'\xff\xff\xff'))
+        assert util.bytes_increment(b'\xff\xff\xff') is None
 
         for s, expected in test_values:
             s = decode(s, 'hex')
             v = util.bytes_increment(s)
             v_hex = encode(v, 'hex')
-            self.assertEqual(expected, v_hex)
-            self.assertLess(s, v)
+            assert expected == v_hex
+            assert s < v
 
     def test_ensure_bytes(self):
-        self.assertIsInstance(util.ensure_bytes('str'), bytes)
-        self.assertEqual(util.ensure_bytes('str'), b'str')
+        assert isinstance(util.ensure_bytes('str'), bytes)
+        assert util.ensure_bytes('str') == b'str'
 
-        self.assertIsInstance(util.ensure_bytes(b'bytes'), bytes)
-        self.assertEqual(util.ensure_bytes(b'bytes'), b'bytes')
+        assert isinstance(util.ensure_bytes(b'bytes'), bytes)
+        assert util.ensure_bytes(b'bytes') == b'bytes'
 
         for x in [1, ('test',), float('inf')]:
-            with self.assertRaises(TypeError):
+            with pytest.raises(TypeError):
                 util.ensure_bytes(x)
 
     def test_remove_async(self):
         r = sync_util._remove_async
-        eq = self.assertEqual
-        eq(
+        assert (
             r("""
             async def x():
                 await some_func()
                 yield y(await other_coro)
-            """),
+            """) ==
             """
             def x():
                 some_func()
@@ -81,16 +81,16 @@ class TestUtil(ut.TestCase):
 
     def test_convert_async_std_methods(self):
         c = sync_util._convert_async_names
-        eq = self.assertEqual
 
-        eq(c('__aenter__'), '__enter__')
-        eq(c('__aexit__'), '__exit__')
-        eq(c('__anext__'), '__next__')
-        eq(c('aclose'), 'close')
-        eq(c('StopAsyncIteration'), 'StopIteration')
+        assert c('__aenter__') == '__enter__'
+        assert c('__aexit__') == '__exit__'
+        assert c('__anext__') == '__next__'
+        assert c('aclose') == 'close'
+        assert c('StopAsyncIteration') == 'StopIteration'
 
-        eq(c('aenter'), 'aenter')
-        eq(c('231!452ca\t123cap__aenter__\n'), '231!452ca\t123cap__enter__\n')
+        assert c('aenter') == 'aenter'
+        assert (c('231!452ca\t123cap__aenter__\n')
+                == '231!452ca\t123cap__enter__\n')
 
     def test_synchronize(self):
         class A:
@@ -114,29 +114,29 @@ class TestUtil(ut.TestCase):
         class B:
             pass
 
-        self.assertTrue(iscoroutinefunction(A.x))
-        self.assertTrue(iscoroutinefunction(A.y))
-        self.assertTrue(iscoroutinefunction(A.__aenter__))
+        assert iscoroutinefunction(A.x)
+        assert iscoroutinefunction(A.y)
+        assert iscoroutinefunction(A.__aenter__)
 
-        self.assertTrue(hasattr(B, 'x'))
-        self.assertFalse(iscoroutinefunction(B.x))
+        assert hasattr(B, 'x')
+        assert not iscoroutinefunction(B.x)
 
-        self.assertTrue(hasattr(B, 'y'))
-        self.assertFalse(iscoroutinefunction(B.y))
+        assert hasattr(B, 'y')
+        assert not iscoroutinefunction(B.y)
 
-        self.assertFalse(hasattr(B, '__aenter__'))
-        self.assertTrue(hasattr(B, '__enter__'))
-        self.assertFalse(iscoroutinefunction(B.__enter__))
+        assert not hasattr(B, '__aenter__')
+        assert hasattr(B, '__enter__')
+        assert not iscoroutinefunction(B.__enter__)
 
-        self.assertFalse(hasattr(B, '__aexit__'))
-        self.assertTrue(hasattr(B, '__exit__'))
-        self.assertFalse(iscoroutinefunction(B.__exit__))
+        assert not hasattr(B, '__aexit__')
+        assert hasattr(B, '__exit__')
+        assert not iscoroutinefunction(B.__exit__)
 
-        self.assertEqual(B().x(), 10)
-        self.assertEqual(B().y(), 10)
+        assert B().x() == 10
+        assert B().y() == 10
 
         with B() as b:
-            self.assertIsInstance(b, B)
+            assert isinstance(b, B)
 
         with B().context() as b:
-            self.assertIsInstance(b, B)
+            assert isinstance(b, B)

@@ -1,3 +1,4 @@
 -r requirements.txt
 coverage
-asynctest
+pytest
+pytest-asyncio

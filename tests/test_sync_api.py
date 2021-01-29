@@ -2,8 +2,9 @@
 HappyBase tests.
 """
 
-import unittest
 from threading import Thread, current_thread
+
+import pytest
 
 from aiohappybase.sync import *  # noqa - For synchronize()
 from aiohappybase.sync._util import synchronize  # noqa
@@ -11,16 +12,28 @@ from aiohappybase.sync._util import synchronize  # noqa
 from tests.test_api import TestAPI as AsyncTestAPI, connection_kwargs
 
 
+@pytest.fixture
+def conn() -> Connection:
+    with Connection(**connection_kwargs) as conn:
+        assert conn is not None
+        yield conn
+
+
+@pytest.fixture
+def table(conn: Connection, table_name: bytes) -> Table:
+    cfs = {
+        'cf1': {},
+        'cf2': None,
+        'cf3': {'max_versions': 1},
+    }
+    table = conn.create_table(table_name, families=cfs)
+    assert table is not None
+    yield table
+    conn.delete_table(table_name, disable=True)
+
+
 @synchronize(base=AsyncTestAPI)
-class TestSyncAPI(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        cls.create_table()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.destroy_table()
+class TestSyncAPI:
 
     @staticmethod
     def _run_tasks(func, count: int = 1):

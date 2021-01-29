@@ -34,7 +34,7 @@ fetch the package from the `Python Package Index <http://pypi.python.org/>`_
 .. note::
 
    Generating and installing the HBase Thrift Python modules (using ``thrift
-   --gen py`` on the ``.thrift`` file) is not necessary, since HappyBase
+   --gen py`` on the ``.thrift`` file) is not necessary, since AIOHappyBase
    bundles pregenerated versions of those modules.
 
 
