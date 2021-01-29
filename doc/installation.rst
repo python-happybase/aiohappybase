@@ -37,6 +37,14 @@ fetch the package from the `Python Package Index <http://pypi.python.org/>`_
    --gen py`` on the ``.thrift`` file) is not necessary, since AIOHappyBase
    bundles pregenerated versions of those modules.
 
+If you are going to be using AIOHappyBase to communicate with an HBase server
+that uses Thrift over HTTP, you will need to install the ``http`` extra as
+well:
+
+::
+
+    (venv_name) $ pip install aiohappybase[http]
+
 
 Testing the installation
 ========================

@@ -552,7 +552,7 @@ class TestAPI:
 
         if table.connection.compat < '0.98':
             with pytest.raises(NotImplementedError):
-                await self._scan_list(reverse=True)
+                await self._scan_list(table, reverse=True)
             return
 
         async with table.batch() as b:

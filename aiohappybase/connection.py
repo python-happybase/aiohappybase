@@ -26,6 +26,13 @@ from ._util import (
     run_coro,
 )
 
+try:
+    from thriftpy2_httpx_client import make_aio_client as make_http_client
+except ImportError:
+    async def make_http_client(*_, **__):
+        raise RuntimeError("thriftpy2_httpx_client is required to"
+                           " use the HTTP client protocol.")
+
 logger = logging.getLogger(__name__)
 
 COMPAT_MODES = ('0.90', '0.92', '0.94', '0.96', '0.98')
@@ -35,6 +42,7 @@ DEFAULT_PORT = int(os.environ.get('AIOHAPPYBASE_PORT', '9090'))
 DEFAULT_COMPAT = os.environ.get('AIOHAPPYBASE_COMPAT', '0.98')
 DEFAULT_TRANSPORT = os.environ.get('AIOHAPPYBASE_TRANSPORT', 'buffered')
 DEFAULT_PROTOCOL = os.environ.get('AIOHAPPYBASE_PROTOCOL', 'binary')
+DEFAULT_CLIENT = os.environ.get('AIOHAPPYBASE_CLIENT', 'socket')
 
 
 class Connection:
@@ -88,6 +96,17 @@ class Connection:
     process as well. ``TBinaryProtocol`` is the default protocol that
     AIOHappyBase uses.
 
+    The optional `client` argument specifies the type of Thrift client
+    to use. Supported values for this argument are ``socket``
+    (the default) and ``http``. Make sure to choose the right one,
+    since otherwise you might see non-obvious connection errors or
+    program hangs when making a connection. To check which client
+    you should use, refer to the ``hbase.regionserver.thrift.http``
+    setting. If it is ``true`` use ``http``, otherwise use ``socket``.
+
+    .. versionadded:: v1.4.0
+        `client` argument
+
     .. versionadded:: 0.9
        `protocol` argument
 
@@ -109,7 +128,10 @@ class Connection:
         binary=TAsyncBinaryProtocolFactory(decode_response=False),
         compact=TAsyncCompactProtocolFactory(decode_response=False),
     )
-    THRIFT_CLIENT_FACTORY = staticmethod(make_client)
+    THRIFT_CLIENTS = dict(
+        socket=make_client,
+        http=make_http_client,
+    )
 
     def __init__(self,
                  host: str = DEFAULT_HOST,
@@ -121,6 +143,7 @@ class Connection:
                  compat: str = DEFAULT_COMPAT,
                  transport: str = DEFAULT_TRANSPORT,
                  protocol: str = DEFAULT_PROTOCOL,
+                 client: str = DEFAULT_CLIENT,
                  **client_kwargs: Any):
         """
         :param host: The host to connect to
@@ -132,6 +155,7 @@ class Connection:
         :param compat: Compatibility mode (optional)
         :param transport: Thrift transport mode (optional)
         :param protocol: Thrift protocol mode (optional)
+        :param client: Thrift client mode (optional)
         :param client_kwargs:
             Extra keyword arguments for `make_client()`. See the ThriftPy2
             documentation for more information.
@@ -149,6 +173,7 @@ class Connection:
             compat=(compat, COMPAT_MODES),
             transport=(transport, self.THRIFT_TRANSPORTS),
             protocol=(protocol, self.THRIFT_PROTOCOLS),
+            client=(client, self.THRIFT_CLIENTS),
         )
 
         # Allow host and port to be None, which may be easier for
@@ -162,6 +187,7 @@ class Connection:
 
         self._transport_factory = self.THRIFT_TRANSPORTS[transport]
         self._protocol_factory = self.THRIFT_PROTOCOLS[protocol]
+        self._client_factory = self.THRIFT_CLIENTS[client]
 
         self.client_kwargs = {
             'service': Hbase,
@@ -196,7 +222,7 @@ class Connection:
             return  # _refresh_thrift_client opened the transport
 
         logger.debug(f"Opening Thrift transport to {self.host}:{self.port}")
-        self.client = await self.THRIFT_CLIENT_FACTORY(**self.client_kwargs)
+        self.client = await self._client_factory(**self.client_kwargs)
 
     def close(self) -> None:
         """
