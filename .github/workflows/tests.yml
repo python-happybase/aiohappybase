@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - '**.py'
+      - '.github/workflows/tests.yml'
+      - 'docker-test.sh'
   schedule:
     # Test master every Saturday at midnight to verify dependencies
     - cron:  '0 0 * * 6'
@@ -29,13 +31,16 @@ jobs:
     name: Test
     needs: flake8
     runs-on: ubuntu-latest
+    container: aiudirog/aiohappybase-test-env:latest
     strategy:
       matrix:
         python: ['3.6', '3.7', '3.8', '3.9']
+        client: ['socket', 'http']
     steps:
       - uses: actions/checkout@v1
       - name: Run Tests
-        uses: ./.github/actions/test
         env:
           PYTHON_VERSION: ${{ matrix.python }}
+          AIOHAPPYBASE_CLIENT: ${{ matrix.client }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: ./docker-test.sh
