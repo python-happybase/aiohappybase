@@ -16,12 +16,12 @@ if [ "${CODECOV_TOKEN}" != "" ]; then
   ${PYTHON} -m pip install coverage codecov
 
   run_tests() {
-    ${PYTHON} -m coverage run -m unittest
+    ${PYTHON} -m coverage run -m pytest
     ${PYTHON} -m coverage xml
     ${PYTHON} -m codecov --token=${CODECOV_TOKEN}
   }
 else
-  run_tests() { ${PYTHON} -m unittest; }
+  run_tests() { ${PYTHON} -m pytest }
 fi
 
 run_tests  # Run tests for latest HBase compat
