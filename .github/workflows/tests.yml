@@ -36,6 +36,7 @@ jobs:
       matrix:
         python: ['3.6', '3.7', '3.8', '3.9']
         client: ['socket', 'http']
+      fail-fast: false
     steps:
       - uses: actions/checkout@v1
       - name: Run Tests
