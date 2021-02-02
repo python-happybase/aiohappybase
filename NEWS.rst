@@ -3,6 +3,23 @@ Version history
 
 .. py:currentmodule:: aiohappybase
 
+AIOHappyBase 1.4.0
+------------------
+
+Release date: 2021-02-02
+
+- Added optional support for HTTP connections using `ThirftPy2 HTTPX Client
+  <https://github.com/aiudirog/ThriftPy2-HTTPX-Client>`__
+
+  - ``thriftpy2-httpx-client`` was added as an optional dependency which can be
+    installed automatically with the ``http`` extra:
+    ``pip install -U aiohappybase[http]``
+
+  - To use the http client, pass ``client='http'`` to :py:class:`Connection`
+
+- Converted all tests to ``pytest`` from ``unittest``/``asynctest``
+
+- Explicitly declared Python 3.9 support
 
 AIOHappyBase 1.3.0
 ------------------
