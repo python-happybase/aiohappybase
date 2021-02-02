@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 try:
     from thriftpy2_httpx_client import make_sync_client as make_http_client
-except ImportError:
-    async def make_http_client(*_, **__):
+except ImportError:  # pragma: no cover
+    def make_http_client(*_, **__):
         raise RuntimeError("thriftpy2_httpx_client is required to"
                            " use the HTTP client protocol.")
 

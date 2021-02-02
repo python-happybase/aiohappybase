@@ -28,7 +28,7 @@ from ._util import (
 
 try:
     from thriftpy2_httpx_client import make_aio_client as make_http_client
-except ImportError:
+except ImportError:  # pragma: no cover
     async def make_http_client(*_, **__):
         raise RuntimeError("thriftpy2_httpx_client is required to"
                            " use the HTTP client protocol.")
